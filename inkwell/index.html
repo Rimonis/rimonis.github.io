@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+<meta name="theme-color" content="#14161c">
+<title>Inkwell · AI writing studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%235b5bf7'/%3E%3Cpath d='M20 46l4-14 18-18 6 6-18 18z' fill='white'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f4f3ef; --paper:#ffffff; --ink:#1d1f24; --muted:#6b6f78; --line:#e3e1da; --soft:#efeee9;
+  --accent:#5b5bf7; --accent-ink:#fff; --accent-soft:#ebebff; --good:#1f9d63; --warn:#c77a00; --bad:#d23c3c;
+  --ins:#d8f5e3; --ins-ink:#0f6a3c; --del:#fde2e2; --del-ink:#9b1c1c;
+  --shadow:0 10px 30px rgba(20,20,40,.14), 0 2px 6px rgba(20,20,40,.08);
+  --radius:12px; --font-ui: system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Bengali",sans-serif;
+  --font-doc: Georgia,"Iowan Old Style","Noto Serif Bengali","Times New Roman",serif; --doc-size:18px;
+}
+[data-theme=dark]{
+  --bg:#14161c; --paper:#1c1f27; --ink:#e7e8ec; --muted:#9aa0ab; --line:#2c303a; --soft:#242832;
+  --accent:#8b8bff; --accent-ink:#0e0f14; --accent-soft:#2a2b4a;
+  --ins:#123b27; --ins-ink:#8de5b4; --del:#4a1d1d; --del-ink:#ffb4b4; --shadow:0 10px 30px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:14px;display:flex;flex-direction:column;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+.hidden{display:none!important}
+.btn{border:1px solid var(--line);background:var(--paper);border-radius:9px;padding:7px 11px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;line-height:1.1}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.ghost{background:transparent;border-color:transparent}
+.btn.ghost:hover{background:var(--soft)}
+.btn.small{padding:5px 8px;font-size:12.5px}
+.btn.danger{color:var(--bad)}
+.btn[disabled]{opacity:.5;pointer-events:none}
+input[type=text],input[type=password],input[type=number],select,textarea{border:1px solid var(--line);background:var(--paper);border-radius:9px;padding:8px 10px;width:100%;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:70px}
+label.f{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.grow{flex:1}
+
+/* header */
+header{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--paper);border-bottom:1px solid var(--line);flex-wrap:nowrap}
+.logo{font-weight:800;letter-spacing:-.3px;font-size:16px;display:flex;align-items:center;gap:6px}
+.logo i{display:inline-block;width:22px;height:22px;border-radius:6px;background:var(--accent);position:relative}
+.logo i:after{content:"";position:absolute;inset:5px 5px 5px 5px;border-left:3px solid #fff;transform:rotate(35deg)}
+#docTitle{border:none;background:transparent;font-weight:600;font-size:15px;padding:6px 8px;border-radius:8px;min-width:80px;width:auto;flex:1;max-width:420px}
+#docTitle:hover,#docTitle:focus{background:var(--soft)}
+.mode-switch{display:flex;background:var(--soft);border-radius:10px;padding:3px}
+.mode-switch button{border:none;background:transparent;padding:6px 10px;border-radius:8px;font-weight:600;color:var(--muted)}
+.mode-switch button.on{background:var(--paper);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.hdr-right{margin-left:auto;display:flex;gap:4px;align-items:center}
+
+/* toolbar */
+#toolbar{display:flex;gap:2px;align-items:center;padding:5px 8px;background:var(--paper);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+#toolbar::-webkit-scrollbar{display:none}
+#toolbar .tb{border:none;background:transparent;min-width:32px;height:32px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;padding:0 7px;font-size:14px;flex:none}
+#toolbar .tb:hover{background:var(--soft)}
+#toolbar .sep{width:1px;height:20px;background:var(--line);margin:0 4px;flex:none}
+#toolbar select{width:auto;padding:5px 6px;flex:none}
+
+/* main */
+main{flex:1;display:flex;min-height:0;position:relative}
+#drawer{width:260px;background:var(--paper);border-right:1px solid var(--line);display:flex;flex-direction:column;flex:none}
+#drawer .dh{padding:10px;display:flex;gap:6px;border-bottom:1px solid var(--line)}
+#docList{overflow:auto;flex:1;padding:6px}
+.doc-item{padding:9px 10px;border-radius:9px;cursor:pointer;display:flex;gap:6px;align-items:center}
+.doc-item:hover{background:var(--soft)}
+.doc-item.on{background:var(--accent-soft)}
+.doc-item .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.doc-item .m{font-size:11px;color:var(--muted)}
+.doc-item .x{opacity:0;border:none;background:none;padding:2px 6px;border-radius:6px}
+.doc-item:hover .x{opacity:.7}
+#editorWrap{flex:1;overflow:auto;position:relative;padding:28px 16px 120px}
+#page{max-width:820px;margin:0 auto;background:var(--paper);border:1px solid var(--line);border-radius:6px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:56px 64px;min-height:calc(100% - 20px)}
+#editor{outline:none;font-family:var(--font-doc);font-size:var(--doc-size);line-height:1.7;min-height:60vh;word-wrap:break-word;caret-color:var(--accent)}
+#editor.sans{font-family:var(--font-ui)}
+#editor:empty:before{content:attr(data-placeholder);color:var(--muted)}
+#editor h1{font-size:1.9em;line-height:1.2;margin:.2em 0 .5em}
+#editor h2{font-size:1.4em;line-height:1.25;margin:1.3em 0 .4em}
+#editor h3{font-size:1.15em;margin:1.1em 0 .3em}
+#editor p{margin:0 0 .8em}
+#editor blockquote{border-left:3px solid var(--accent);margin:0 0 .8em;padding:.1em 0 .1em 1em;color:var(--muted)}
+#editor pre{background:var(--soft);padding:10px 12px;border-radius:8px;font-size:.85em;overflow:auto;white-space:pre-wrap}
+#editor code{background:var(--soft);padding:1px 5px;border-radius:5px;font-size:.88em}
+#editor table{border-collapse:collapse;width:100%;margin:0 0 1em;font-size:.92em}
+#editor td,#editor th{border:1px solid var(--line);padding:6px 9px;vertical-align:top}
+#editor th{background:var(--soft);text-align:left}
+#editor a{color:var(--accent)}
+#editor hr{border:none;border-top:1px solid var(--line);margin:1.5em 0}
+#editor .toc{background:var(--soft);border-radius:8px;padding:12px 18px;margin:0 0 1.2em;font-family:var(--font-ui);font-size:.85em}
+#editor .toc ol{margin:.3em 0;padding-left:1.4em}
+#editor .cover{text-align:center;padding:3em 0 2em;border-bottom:1px solid var(--line);margin-bottom:2em}
+::highlight(ai-target){background-color:rgba(91,91,247,.28)}
+::highlight(jump){background-color:rgba(255,200,0,.45)}
+body.report #editor.numbered{counter-reset:h2}
+body.report #editor.numbered > h2{counter-reset:h3}
+body.report #editor.numbered > h2:before{counter-increment:h2;content:counter(h2) ". ";color:var(--accent)}
+body.report #editor.numbered > h3:before{counter-increment:h3;content:counter(h2) "." counter(h3) " ";color:var(--accent)}
+body.report #page{border-top:4px solid var(--accent)}
+body.focus header,body.focus #toolbar,body.focus #drawer,body.focus #side,body.focus footer{display:none!important}
+body.focus #editorWrap{padding-top:60px}
+#focusExit{position:fixed;top:10px;right:12px;z-index:40}
+
+/* side panel */
+#side{width:380px;background:var(--paper);border-left:1px solid var(--line);display:flex;flex-direction:column;flex:none;min-height:0}
+.tabs{display:flex;border-bottom:1px solid var(--line);padding:0 6px;gap:2px;overflow-x:auto;scrollbar-width:none;flex:none}
+.tabs button{border:none;background:none;padding:11px 10px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs .close{margin-left:auto}
+.pane{flex:1;overflow:auto;padding:14px;min-height:0}
+.pane h4{margin:16px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.pane h4:first-child{margin-top:0}
+.card{border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:10px;background:var(--paper)}
+.card .title{font-weight:700;margin-bottom:6px;display:flex;gap:6px;align-items:center}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:var(--soft);border-radius:10px;padding:9px 10px}
+.stat b{display:block;font-size:18px}
+.stat span{font-size:11.5px;color:var(--muted)}
+.issue{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:6px;font-size:13px}
+.issue .q{font-family:var(--font-doc);margin:3px 0 6px;color:var(--ink)}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;background:var(--soft);color:var(--muted)}
+.tag.bad{background:var(--del);color:var(--del-ink)}
+.tag.ok{background:var(--ins);color:var(--ins-ink)}
+.tag.warn{background:#fff1d6;color:#8a5200}
+[data-theme=dark] .tag.warn{background:#3d2e10;color:#ffd38a}
+.result{border:1px solid var(--accent);border-radius:var(--radius);padding:12px;margin:10px 0;background:var(--paper)}
+.result .md{font-family:var(--font-doc);font-size:15px;line-height:1.6;max-height:340px;overflow:auto}
+.result .md p{margin:0 0 .6em}
+.result .md h1,.result .md h2,.result .md h3{font-size:1.05em;margin:.6em 0 .3em}
+.check{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--line)}
+.check:last-child{border-bottom:none}
+.check .n{flex:1}
+
+/* chat */
+#chat{display:flex;flex-direction:column;height:100%}
+#chatLog{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:92%;padding:9px 12px;border-radius:14px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word}
+.msg.user{align-self:flex-end;background:var(--accent);color:var(--accent-ink);border-bottom-right-radius:4px}
+.msg.ai{align-self:flex-start;background:var(--soft);border-bottom-left-radius:4px}
+.msg.sys{align-self:center;font-size:12px;color:var(--muted);background:none}
+.act{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.act .a{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:7px 9px;font-size:12.5px;white-space:normal}
+.act .a .p{font-family:var(--font-doc);max-height:110px;overflow:auto;margin:4px 0;color:var(--muted)}
+#chatInput{border-top:1px solid var(--line);padding:10px;display:flex;gap:6px;align-items:flex-end}
+#chatInput textarea{min-height:42px;max-height:140px;resize:none}
+.ctx{font-size:11.5px;color:var(--muted);padding:6px 12px 0}
+
+/* bubble */
+#bubble{position:fixed;z-index:50;background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);width:min(470px,calc(100vw - 16px));padding:8px}
+#bubble .chips{display:flex;flex-wrap:wrap;gap:4px}
+#bubble .chip{border:1px solid var(--line);background:var(--paper);border-radius:20px;padding:5px 10px;font-size:12.5px;white-space:nowrap}
+#bubble .chip:hover{background:var(--accent-soft);border-color:var(--accent)}
+#bubble .chip.ai{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+#bubble .custom{display:flex;gap:6px;margin-top:7px}
+#bubble .custom input{padding:7px 10px}
+#bubble .res{margin-top:4px}
+#bubble .diff{font-family:var(--font-doc);font-size:15px;line-height:1.6;max-height:min(46vh,380px);overflow:auto;padding:8px 10px;background:var(--soft);border-radius:10px;white-space:pre-wrap;margin:6px 0 8px}
+#bubble .diff ins,.act ins,.issue ins{background:var(--ins);color:var(--ins-ink);text-decoration:none;border-radius:3px}
+#bubble .diff del,.act del,.issue del{background:var(--del);color:var(--del-ink);border-radius:3px}
+#bubble .lbl{font-size:12px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:6px}
+#bubble.sheet{left:0!important;right:0;bottom:0;top:auto!important;width:100%;border-radius:16px 16px 0 0;padding:10px 10px calc(10px + env(safe-area-inset-bottom))}
+.spin{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;display:inline-block}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* fab + voice */
+#fab{position:fixed;right:18px;bottom:46px;z-index:45;width:56px;height:56px;border-radius:50%;border:none;background:var(--accent);color:var(--accent-ink);box-shadow:var(--shadow);font-size:22px;display:flex;align-items:center;justify-content:center}
+#fabMenu{position:fixed;right:18px;bottom:110px;z-index:46;background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;display:flex;flex-direction:column;min-width:230px}
+#fabMenu button{border:none;background:none;text-align:left;padding:10px 12px;border-radius:9px;display:flex;gap:10px;align-items:center}
+#fabMenu button:hover{background:var(--soft)}
+#fabMenu small{display:block;color:var(--muted);font-size:11.5px}
+#voice{position:fixed;left:50%;transform:translateX(-50%);bottom:40px;z-index:60;background:var(--paper);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:14px 16px;width:min(520px,calc(100vw - 20px))}
+#voice .top{display:flex;align-items:center;gap:10px}
+.pulse{width:14px;height:14px;border-radius:50%;background:var(--bad);animation:pu 1.2s ease-in-out infinite}
+@keyframes pu{0%,100%{box-shadow:0 0 0 0 rgba(210,60,60,.5)}50%{box-shadow:0 0 0 9px rgba(210,60,60,0)}}
+#voice .live{margin-top:8px;min-height:22px;font-family:var(--font-doc);color:var(--muted);max-height:120px;overflow:auto}
+#voiceLevel{height:4px;background:var(--soft);border-radius:4px;margin-top:10px;overflow:hidden}
+#voiceLevel i{display:block;height:100%;width:0;background:var(--accent);transition:width .08s}
+
+/* footer */
+footer{display:flex;gap:14px;align-items:center;padding:5px 12px;border-top:1px solid var(--line);background:var(--paper);font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden}
+#goalBar{width:80px;height:5px;background:var(--soft);border-radius:4px;overflow:hidden;display:inline-block;vertical-align:middle}
+#goalBar i{display:block;height:100%;background:var(--good);width:0}
+
+/* modal + toast */
+.modal-bg{position:fixed;inset:0;background:rgba(10,10,20,.45);z-index:80;display:flex;align-items:center;justify-content:center;padding:14px}
+.modal{background:var(--paper);border-radius:16px;box-shadow:var(--shadow);width:min(560px,100%);max-height:calc(100vh - 28px);overflow:auto;padding:18px 20px}
+.modal h3{margin:0 0 4px}
+.modal .foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:90px;z-index:90;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
+#toast div{background:#1d1f24;color:#fff;padding:9px 14px;border-radius:10px;box-shadow:var(--shadow);font-size:13px;pointer-events:auto;display:flex;gap:10px;align-items:center}
+#toast div button{background:none;border:none;color:#a9a9ff;font-weight:700;padding:0}
+.switch{display:flex;align-items:center;gap:8px;margin:8px 0}
+.switch input{width:18px;height:18px;accent-color:var(--accent)}
+
+@media (max-width:1100px){ #drawer{position:absolute;left:0;top:0;bottom:0;z-index:30;box-shadow:var(--shadow)} }
+@media (max-width:900px){
+  #side{position:fixed;inset:auto 0 0 0;height:78vh;width:100%;z-index:55;border-radius:16px 16px 0 0;box-shadow:var(--shadow);border:1px solid var(--line)}
+  #page{padding:28px 20px;border-radius:0;border-left:none;border-right:none}
+  #editorWrap{padding:0 0 140px}
+  .hide-m{display:none!important}
+  #docTitle{max-width:none;min-width:40px}
+  #fab{bottom:40px}
+}
+@media (max-width:640px){
+  header{flex-wrap:wrap;row-gap:4px;padding:6px 8px}
+  #docTitle{flex:1 1 calc(100% - 52px);order:1}
+  #btnDrawer{order:0}
+  .mode-switch{order:2}
+  .hdr-right{order:3;gap:0}
+  .hdr-right .btn{padding:7px 8px}
+  #page{padding:22px 16px}
+}
+@media print{
+  header,#toolbar,#drawer,#side,footer,#fab,#fabMenu,#bubble,#voice,#toast{display:none!important}
+  body{overflow:visible;background:#fff;display:block}
+  main,#editorWrap{display:block;overflow:visible;padding:0}
+  #page{border:none;box-shadow:none;padding:0;max-width:none}
+  #editor{color:#000}
+}
+</style>
+</head>
+<body>
+<header>
+  <button class="btn ghost" id="btnDrawer" title="Documents">☰</button>
+  <div class="logo hide-m"><i></i>Inkwell</div>
+  <input id="docTitle" type="text" value="" placeholder="Untitled" aria-label="Document title">
+  <div class="mode-switch" role="tablist" aria-label="Mode">
+    <button id="modeWrite" class="on">Write</button>
+    <button id="modeReport">Report</button>
+  </div>
+  <div class="hdr-right">
+    <button class="btn ghost" data-open="assistant" title="AI assistant (Ctrl+M for voice)">💬<span class="hide-m"> Assistant</span></button>
+    <button class="btn ghost" data-open="ai" title="AI tools">✨<span class="hide-m"> AI tools</span></button>
+    <button class="btn ghost" data-open="writing" title="Writing tools">🧰<span class="hide-m"> Tools</span></button>
+    <button class="btn ghost" data-open="report" id="btnReportTab" title="Report tools">📑<span class="hide-m"> Report</span></button>
+    <button class="btn ghost" id="btnExport" title="Export / import">⤓</button>
+    <button class="btn ghost" id="btnSettings" title="Settings">⚙︎</button>
+  </div>
+</header>
+
+<div id="toolbar">
+  <button class="tb" data-cmd="undo" title="Undo (Ctrl+Z)">↶</button>
+  <button class="tb" data-cmd="redo" title="Redo (Ctrl+Y)">↷</button>
+  <span class="sep"></span>
+  <select id="blockSel" title="Text style">
+    <option value="p">Paragraph</option><option value="h1">Title</option><option value="h2">Heading</option><option value="h3">Subheading</option><option value="blockquote">Quote</option><option value="pre">Code</option>
+  </select>
+  <span class="sep"></span>
+  <button class="tb" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+  <button class="tb" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+  <button class="tb" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+  <button class="tb" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+  <button class="tb" data-cmd="superscript" title="Superscript">x²</button>
+  <span class="sep"></span>
+  <button class="tb" data-cmd="insertUnorderedList" title="Bullet list">• ≡</button>
+  <button class="tb" data-cmd="insertOrderedList" title="Numbered list">1. ≡</button>
+  <button class="tb" data-cmd="outdent" title="Outdent">⇤</button>
+  <button class="tb" data-cmd="indent" title="Indent">⇥</button>
+  <span class="sep"></span>
+  <button class="tb" data-cmd="justifyLeft" title="Align left">⯇</button>
+  <button class="tb" data-cmd="justifyCenter" title="Center">≣</button>
+  <button class="tb" data-cmd="justifyFull" title="Justify">☰</button>
+  <span class="sep"></span>
+  <button class="tb" id="tbLink" title="Link">🔗</button>
+  <button class="tb" id="tbTable" title="Insert table">▦</button>
+  <button class="tb" data-cmd="insertHorizontalRule" title="Divider">―</button>
+  <button class="tb" data-cmd="removeFormat" title="Clear formatting">⌫ₐ</button>
+  <span class="sep"></span>
+  <button class="tb" id="tbFind" title="Find & replace (Ctrl+F)">🔍</button>
+  <button class="tb" id="tbRead" title="Read aloud (selection or whole document)">🔊</button>
+  <button class="tb" id="tbFocus" title="Focus mode">◎</button>
+  <button class="tb" id="tbTheme" title="Dark / light">◐</button>
+</div>
+
+<main>
+  <aside id="drawer" class="hidden">
+    <div class="dh"><button class="btn primary grow" id="newDoc">＋ New document</button><button class="btn" id="closeDrawer">✕</button></div>
+    <div id="docList"></div>
+  </aside>
+
+  <div id="editorWrap">
+    <div id="page"><div id="editor" contenteditable="true" spellcheck="true" data-placeholder="Start writing. Select any text to edit it with AI…"></div></div>
+  </div>
+
+  <aside id="side" class="hidden">
+    <div class="tabs">
+      <button data-tab="assistant">💬 Assistant</button>
+      <button data-tab="ai">✨ AI tools</button>
+      <button data-tab="writing">🧰 Writing</button>
+      <button data-tab="report">📑 Report</button>
+      <button class="close" id="closeSide" title="Close">✕</button>
+    </div>
+
+    <!-- Assistant -->
+    <div class="pane" id="pane-assistant" style="padding:0">
+      <div id="chat">
+        <div id="chatLog"></div>
+        <div class="ctx" id="chatCtx"></div>
+        <div id="chatInput">
+          <button class="btn" id="chatMic" title="Talk to the assistant">🎙</button>
+          <textarea id="chatText" rows="1" placeholder="Ask or instruct, e.g. “make the selected part more persuasive”"></textarea>
+          <button class="btn primary" id="chatSend">➤</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI tools -->
+    <div class="pane hidden" id="pane-ai">
+      <h4>Write</h4>
+      <div class="card">
+        <textarea id="genPrompt" placeholder="What should I write? e.g. a paragraph on why SMEs struggle with export finance"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button class="btn primary" id="genBtn">✍️ Write at cursor</button>
+          <button class="btn" id="contBtn" title="Continue from the cursor">↪ Continue writing</button>
+        </div>
+      </div>
+      <h4>Whole document</h4>
+      <div class="row">
+        <button class="btn" id="proofBtn">✅ Proofread</button>
+        <button class="btn" id="sumBtn">📝 Summarize</button>
+        <button class="btn" id="titleBtn">🏷 Suggest titles</button>
+        <button class="btn" id="toneBtn">🎯 Tone check</button>
+      </div>
+      <div id="aiOut"></div>
+      <h4>Your quick actions</h4>
+      <p class="muted small">These show up in the selection menu. Write the instruction the way you'd say it to an editor.</p>
+      <div id="customList"></div>
+      <div class="card">
+        <input type="text" id="caName" placeholder="Button name, e.g. Make punchy">
+        <textarea id="caPrompt" style="margin-top:6px" placeholder="Instruction, e.g. Rewrite with short, punchy sentences and a strong verb up front."></textarea>
+        <button class="btn" id="caAdd" style="margin-top:6px">＋ Add quick action</button>
+      </div>
+    </div>
+
+    <!-- Writing tools -->
+    <div class="pane hidden" id="pane-writing">
+      <h4>Stats</h4>
+      <div class="grid2" id="stats"></div>
+      <label class="f">Word goal (0 = off)</label>
+      <input type="number" id="goalInput" min="0" step="50">
+      <h4>Style scan</h4>
+      <div class="row"><button class="btn primary" id="scanBtn">🔎 Scan document</button><span class="muted small">Long sentences, passive voice, filler, repeats, em dashes</span></div>
+      <div id="scanOut" style="margin-top:10px"></div>
+      <h4>Find & replace</h4>
+      <div class="card">
+        <input type="text" id="findIn" placeholder="Find">
+        <input type="text" id="replIn" placeholder="Replace with" style="margin-top:6px">
+        <label class="switch small"><input type="checkbox" id="findCase"> Match case</label>
+        <div class="row">
+          <button class="btn small" id="findNext">Find next</button>
+          <button class="btn small" id="replOne">Replace</button>
+          <button class="btn small" id="replAll">Replace all</button>
+          <span class="muted small" id="findInfo"></span>
+        </div>
+      </div>
+      <h4>Most used words</h4>
+      <div id="freq" class="row"></div>
+    </div>
+
+    <!-- Report -->
+    <div class="pane hidden" id="pane-report">
+      <div id="reportOff" class="card">
+        <div class="title">📑 Report mode is off</div>
+        <p class="muted small" style="margin:0 0 8px">Report mode adds numbered headings, a section checklist, templates, citations and a report reviewer. Your text stays the same.</p>
+        <button class="btn primary" id="turnReportOn">Turn on Report mode</button>
+      </div>
+      <div id="reportOn">
+        <label class="f" style="margin-top:0">Report type</label>
+        <select id="reportType"></select>
+        <div class="row" style="margin-top:8px">
+          <button class="btn small" id="insTemplate">📄 Insert template</button>
+          <button class="btn small" id="insCover">🪪 Cover page</button>
+          <button class="btn small" id="insToc">📚 Table of contents</button>
+        </div>
+        <label class="switch small"><input type="checkbox" id="numToggle"> Number the headings (1, 1.1, …)</label>
+
+        <h4>Sections</h4>
+        <div class="card" id="sectionList"></div>
+
+        <h4>AI report helpers</h4>
+        <div class="card">
+          <div class="title">🧭 Outline from a topic</div>
+          <input type="text" id="olTopic" placeholder="Topic, e.g. Market entry for smart switches in Dhaka">
+          <textarea id="olNotes" style="margin-top:6px" placeholder="Audience, length, notes, data you have (optional)"></textarea>
+          <button class="btn" id="olBtn" style="margin-top:6px">Generate outline</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="draftSec" title="Puts your cursor's section into words, using any notes you wrote under the heading">✍️ Draft this section</button>
+          <button class="btn" id="execSum">⭐ Executive summary</button>
+          <button class="btn" id="reviewBtn">🧑‍🏫 Review my report</button>
+        </div>
+        <div id="repOut"></div>
+
+        <h4>Citations</h4>
+        <div class="card">
+          <select id="citeStyle"><option>APA 7</option><option>Harvard</option><option>IEEE</option><option>MLA 9</option><option>Chicago</option></select>
+          <textarea id="citeIn" style="margin-top:6px" placeholder="Paste source details, one per line: a URL with title/author/date, a book, a paper… messy is fine"></textarea>
+          <button class="btn" id="citeBtn" style="margin-top:6px">Format references</button>
+          <div id="citeOut"></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <span id="wc">0 words</span>
+  <span id="selwc"></span>
+  <span id="goalWrap" class="hidden"><span id="goalBar"><i></i></span> <span id="goalTxt"></span></span>
+  <span id="saved">Saved</span>
+  <span style="margin-left:auto" id="modelTag"></span>
+</footer>
+
+<!-- Selection bubble -->
+<div id="bubble" class="hidden" role="dialog" aria-label="AI edit selection">
+  <div id="bMenu">
+    <div class="chips" id="bChips"></div>
+    <div class="custom">
+      <input type="text" id="bInput" placeholder="Tell AI what to do with the selection…">
+      <button class="btn small primary" id="bGo">Go</button>
+      <button class="btn small" id="bMic" title="Say the instruction">🎙</button>
+    </div>
+  </div>
+  <div id="bRes" class="res hidden">
+    <div class="lbl"><span id="bLabel"></span><span class="spin" id="bSpin"></span><span style="margin-left:auto;cursor:pointer" id="bView" title="Switch between changes and clean view">changes</span></div>
+    <div class="diff" id="bDiff"></div>
+    <div class="row">
+      <button class="btn primary small" id="bAccept">✓ Replace</button>
+      <button class="btn small" id="bInsertBelow">↧ Insert below</button>
+      <button class="btn small" id="bRetry">↻ Retry</button>
+      <button class="btn small" id="bCopy">Copy</button>
+      <button class="btn small ghost" id="bDiscard" style="margin-left:auto">Discard</button>
+    </div>
+  </div>
+</div>
+
+<button id="fab" title="Voice (Ctrl+M)">🎙</button>
+<div id="fabMenu" class="hidden">
+  <button id="vDictate">⌨️<span><b>Dictate</b><small>Type with your voice at the cursor</small></span></button>
+  <button id="vAgent">🤖<span><b>Talk to the AI</b><small>Ask or give an editing order</small></span></button>
+  <button id="vSel">✂️<span><b>Voice edit selection</b><small>Say how to change the selected text</small></span></button>
+</div>
+<div id="voice" class="hidden">
+  <div class="top"><span class="pulse"></span><b id="vTitle">Listening</b><span class="muted small" id="vTime">0:00</span>
+    <span style="margin-left:auto" class="row"><button class="btn small" id="vCancel">Cancel</button><button class="btn small primary" id="vStop">Done</button></span></div>
+  <div class="live" id="vLive"></div>
+  <div id="voiceLevel"><i></i></div>
+</div>
+<button id="focusExit" class="btn small hidden">Exit focus</button>
+<div id="toast"></div>
+<input type="file" id="fileIn" accept=".txt,.md,.markdown,.html,.htm" class="hidden">
+
+<script>
+"use strict";
+/* ================= helpers ================= */
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+const isBangla = s => /[ঀ-৿]/.test(s||'');
+const store = {
+  get(k,d){ try{ const v=localStorage.getItem('inkwell.'+k); return v==null?d:JSON.parse(v);}catch(e){return d;} },
+  set(k,v){ try{ localStorage.setItem('inkwell.'+k, JSON.stringify(v)); }catch(e){} }
+};
+function toast(msg, action, ms=3200){
+  const d=document.createElement('div'); d.innerHTML='<span>'+esc(msg)+'</span>';
+  if(action){ const b=document.createElement('button'); b.textContent=action.label; b.onclick=()=>{action.fn(); d.remove();}; d.appendChild(b); }
+  $('#toast').appendChild(d); setTimeout(()=>d.remove(), action?6000:ms);
+}
+function modal(html, {wide}={}){
+  const bg=document.createElement('div'); bg.className='modal-bg';
+  bg.innerHTML='<div class="modal"'+(wide?' style="width:min(720px,100%)"':'')+'>'+html+'</div>';
+  document.body.appendChild(bg);
+  bg.addEventListener('mousedown', e=>{ if(e.target===bg) bg.remove(); });
+  return bg;
+}
+function confirmBox(msg, okLabel='OK'){
+  return new Promise(res=>{
+    const m=modal('<p style="margin:4px 0 0;line-height:1.5">'+esc(msg)+'</p><div class="foot"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok>'+esc(okLabel)+'</button></div>');
+    $('[data-x]',m).onclick=()=>{m.remove();res(false)}; $('[data-ok]',m).onclick=()=>{m.remove();res(true)};
+  });
+}
+function promptBox(label, val=''){
+  return new Promise(res=>{
+    const m=modal('<label class="f" style="margin-top:0">'+esc(label)+'</label><input type="text" data-i value="'+esc(val)+'"><div class="foot"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok>OK</button></div>');
+    const i=$('[data-i]',m); setTimeout(()=>i.focus(),30);
+    const ok=()=>{m.remove();res(i.value)}; $('[data-ok]',m).onclick=ok; i.onkeydown=e=>{if(e.key==='Enter')ok()};
+    $('[data-x]',m).onclick=()=>{m.remove();res(null)};
+  });
+}
+async function copyText(t){ try{ await navigator.clipboard.writeText(t); toast('Copied'); }catch(e){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy'); toast('Copied');}catch(_){toast('Copy failed');} ta.remove(); } }
+
+/* ================= settings ================= */
+const DEFAULTS = {apiKey:'', model:'gemini-2.5-flash', temperature:0.7, styleNotes:'', noEmDash:true, autoApply:true, speak:false,
+  voiceLang:'en-US', dictEngine:'browser', cleanDictation:false, font:'serif', fontSize:18, theme:'light', goal:0, numbered:true,
+  reportType:'general', customActions:[]};
+let S = Object.assign({}, DEFAULTS, store.get('settings', {}));
+const saveSettings = () => store.set('settings', S);
+
+/* ================= markdown <-> html ================= */
+function inlineMd(s){
+  // s is raw text; escape then apply inline markdown
+  let out = esc(s);
+  const codes=[]; out = out.replace(/`([^`]+)`/g, (_,c)=>{codes.push(c); return '\u0000'+(codes.length-1)+'\u0000';});
+  out = out.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:|#)[^)\s]+)\)/g, '<a href="$2">$1</a>');
+  out = out.replace(/\*\*\*(.+?)\*\*\*/g,'<b><i>$1</i></b>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/__(.+?)__/g,'<b>$1</b>');
+  out = out.replace(/(^|[^\*\w])\*(?!\s)(.+?)(?<!\s)\*(?!\*)/g,'$1<i>$2</i>').replace(/(^|[^_\w])_(?!\s)(.+?)(?<!\s)_(?!\w)/g,'$1<i>$2</i>');
+  out = out.replace(/~~(.+?)~~/g,'<s>$1</s>').replace(/\^(\S+?)\^/g,'<sup>$1</sup>');
+  out = out.replace(/\u0000(\d+)\u0000/g, (_,i)=>'<code>'+codes[+i]+'</code>');
+  return out;
+}
+function mdToHtml(md){
+  md = String(md||'').replace(/\r\n?/g,'\n');
+  const lines = md.split('\n'); let html=''; let i=0;
+  const isTableSep = l => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(l);
+  const cells = l => l.trim().replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+  while(i<lines.length){
+    let l = lines[i];
+    if(!l.trim()){ i++; continue; }
+    let m;
+    if(/^```/.test(l)){ let code=[]; i++; while(i<lines.length && !/^```/.test(lines[i])) code.push(lines[i++]); i++; html+='<pre>'+esc(code.join('\n'))+'</pre>'; continue; }
+    if((m=l.match(/^(#{1,6})\s+(.*)$/))){ const n=Math.min(m[1].length,6); html+=`<h${n}>${inlineMd(m[2].replace(/\s#+$/,''))}</h${n}>`; i++; continue; }
+    if(/^\s*([-*_])\s*\1\s*\1[\s\1]*$/.test(l)){ html+='<hr>'; i++; continue; }
+    if(l.includes('|') && i+1<lines.length && isTableSep(lines[i+1])){
+      const head=cells(l); i+=2; let rows=[];
+      while(i<lines.length && lines[i].includes('|') && lines[i].trim()){ rows.push(cells(lines[i])); i++; }
+      html+='<table><thead><tr>'+head.map(c=>'<th>'+inlineMd(c)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+head.map((_,k)=>'<td>'+inlineMd(r[k]||'')+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+      continue;
+    }
+    if(/^\s*>/.test(l)){ let q=[]; while(i<lines.length && /^\s*>/.test(lines[i])) q.push(lines[i++].replace(/^\s*>\s?/,'')); html+='<blockquote>'+mdToHtml(q.join('\n'))+'</blockquote>'; continue; }
+    if(/^\s*([-*+]|\d+[.)])\s+/.test(l)){ const r=parseList(lines,i); html+=r.html; i=r.i; continue; }
+    let para=[l.trim()]; i++;
+    while(i<lines.length && lines[i].trim() && !/^(#{1,6}\s|```|\s*>|\s*([-*+]|\d+[.)])\s+)/.test(lines[i]) && !(lines[i].includes('|') && i+1<lines.length && isTableSep(lines[i+1]))) para.push(lines[i++].trim());
+    html+='<p>'+para.map(inlineMd).join('<br>')+'</p>';
+  }
+  return html;
+}
+function parseList(lines, i){
+  const indentOf = l => l.match(/^\s*/)[0].replace(/\t/g,'    ').length;
+  const base = indentOf(lines[i]); const ordered = /^\s*\d+[.)]/.test(lines[i]);
+  let html = ordered?'<ol>':'<ul>';
+  while(i<lines.length){
+    const l=lines[i]; if(!l.trim()){ // blank: continue list if next is item at same level
+      if(i+1<lines.length && /^\s*([-*+]|\d+[.)])\s+/.test(lines[i+1]) && indentOf(lines[i+1])>=base){ i++; continue; } break; }
+    const ind=indentOf(l); const m=l.match(/^\s*([-*+]|\d+[.)])\s+(.*)$/);
+    if(m && ind===base){ html+='<li>'+inlineMd(m[2]); i++;
+      if(i<lines.length && /^\s*([-*+]|\d+[.)])\s+/.test(lines[i]) && indentOf(lines[i])>base){ const r=parseList(lines,i); html+=r.html; i=r.i; }
+      html+='</li>'; continue; }
+    if(m && ind>base){ const r=parseList(lines,i); html=html.replace(/<\/li>$/,'')+r.html+'</li>'; i=r.i; continue; }
+    if(!m && ind>base){ html=html.replace(/<\/li>$/,'')+' '+inlineMd(l.trim())+'</li>'; i++; continue; }
+    break;
+  }
+  return {html: html+(ordered?'</ol>':'</ul>'), i};
+}
+function mdInline(md){ // single paragraph -> inline html (no <p>)
+  const t=String(md||'').trim();
+  if(/\n\s*\n/.test(t) || /^(#{1,6}\s|\s*[-*+]\s|\s*\d+[.)]\s|>|```|\|)/m.test(t)) return null;
+  return t.split('\n').map(inlineMd).join('<br>');
+}
+function htmlToMd(root){
+  function kids(n, ctx){ return [...n.childNodes].map(c=>walk(c, ctx)).join(''); }
+  function walk(n, ctx={}){
+    if(n.nodeType===3) return n.data.replace(/ /g,' ');
+    if(n.nodeType!==1) return '';
+    const t=n.tagName.toLowerCase(); const inner=()=>kids(n,ctx);
+    switch(t){
+      case 'b': case 'strong': { const x=inner(); return x.trim()?'**'+x+'**':x; }
+      case 'i': case 'em': { const x=inner(); return x.trim()?'*'+x+'*':x; }
+      case 's': case 'strike': case 'del': return '~~'+inner()+'~~';
+      case 'sup': return '^'+inner()+'^';
+      case 'code': return '`'+n.textContent+'`';
+      case 'a': return '['+inner()+']('+(n.getAttribute('href')||'#')+')';
+      case 'br': return '\n';
+      case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6': return '#'.repeat(+t[1])+' '+inner().trim()+'\n\n';
+      case 'p': case 'div': case 'section': case 'nav': { const x=inner(); return x.trim()? x.trim()+'\n\n' : ''; }
+      case 'blockquote': return inner().trim().split('\n').map(l=>'> '+l).join('\n')+'\n\n';
+      case 'pre': return '```\n'+n.textContent+'\n```\n\n';
+      case 'hr': return '---\n\n';
+      case 'ul': case 'ol': {
+        const depth=(ctx.depth||0); let k=0;
+        const items=[...n.children].filter(c=>c.tagName==='LI').map(li=>{ k++;
+          const nested=[...li.childNodes].filter(c=>c.nodeType===1 && /^(UL|OL)$/.test(c.tagName));
+          const own=[...li.childNodes].filter(c=>!nested.includes(c)).map(c=>walk(c,{depth})).join('').trim().replace(/\n{2,}/g,' ');
+          const pre='  '.repeat(depth)+(t==='ol'?k+'. ':'- ');
+          return pre+own+(nested.length?'\n'+nested.map(x=>walk(x,{depth:depth+1})).join('').replace(/\n+$/,''):'');
+        });
+        return items.join('\n')+(depth?'\n':'\n\n');
+      }
+      case 'li': return '- '+inner().trim()+'\n';
+      case 'table': {
+        const rows=[...n.querySelectorAll('tr')].map(tr=>[...tr.children].map(td=>kids(td).trim().replace(/\n+/g,' ').replace(/\|/g,'\\|')));
+        if(!rows.length) return '';
+        const w=Math.max(...rows.map(r=>r.length)); const pad=r=>{while(r.length<w)r.push('');return r;};
+        return '| '+pad(rows[0]).join(' | ')+' |\n|'+' --- |'.repeat(w)+'\n'+rows.slice(1).map(r=>'| '+pad(r).join(' | ')+' |').join('\n')+'\n\n';
+      }
+      default: return inner();
+    }
+  }
+  return walk(root).replace(/\n{3,}/g,'\n\n');
+}
+const ALLOWED = new Set(['P','BR','B','STRONG','I','EM','U','S','STRIKE','DEL','SUP','SUB','H1','H2','H3','H4','H5','H6','UL','OL','LI','BLOCKQUOTE','A','TABLE','THEAD','TBODY','TR','TH','TD','CODE','PRE','HR','NAV','DIV']);
+function sanitizeHtml(html){
+  const doc=new DOMParser().parseFromString('<body>'+html+'</body>','text/html');
+  const clean=node=>{
+    [...node.childNodes].forEach(c=>{
+      if(c.nodeType===8){ c.remove(); return; }
+      if(c.nodeType!==1) return;
+      if(/^(SCRIPT|STYLE|META|LINK|TITLE|IFRAME|OBJECT|SVG|IMG|XML)$/.test(c.tagName)){ c.remove(); return; }
+      clean(c);
+      if(!ALLOWED.has(c.tagName)){ // unwrap; span with bold/italic style -> keep emphasis
+        const st=(c.getAttribute&&c.getAttribute('style'))||'';
+        let rep=document.createDocumentFragment(); while(c.firstChild) rep.appendChild(c.firstChild);
+        if(/font-weight:\s*(bold|[6-9]00)/.test(st)){ const b=doc.createElement('b'); b.appendChild(rep); rep=b; }
+        if(/font-style:\s*italic/.test(st)){ const i=doc.createElement('i'); i.appendChild(rep); rep=i; }
+        c.replaceWith(rep); return;
+      }
+      [...c.attributes].forEach(a=>{ const ok=(c.tagName==='A'&&a.name==='href'&&/^(https?:|mailto:|#)/i.test(a.value)) || (a.name==='class'&&/^(toc|cover)$/.test(a.value)) || a.name==='colspan' || a.name==='rowspan'; if(!ok) c.removeAttribute(a.name); });
+    });
+  };
+  clean(doc.body); return doc.body.innerHTML;
+}
+const cleanAI = t => String(t||'').replace(/^\s*```(?:markdown|md|text)?\s*\n([\s\S]*?)\n```\s*$/,'$1').replace(/^\s*["“](.*)["”]\s*$/s,'$1').trim();
+
+/* ================= Gemini ================= */
+const API = 'https://generativelanguage.googleapis.com/v1beta';
+const modelId = () => String(S.model||'gemini-2.5-flash').replace(/^models\//,'').trim();
+function styleRules(){
+  let r='';
+  if(S.noEmDash) r+='\n- Never use em dashes (—). Use commas, colons, full stops or brackets instead.';
+  if(S.styleNotes.trim()) r+='\n- House style from the user: '+S.styleNotes.trim();
+  return r ? '\nStyle rules:'+r : '';
+}
+async function gemini({system, parts, history=[], json=false, temperature, onChunk, signal}){
+  if(!S.apiKey){ openSettings(); throw new Error('Add your Gemini API key in Settings first.'); }
+  const body={contents:[...history, {role:'user', parts}], generationConfig:{temperature: temperature ?? +S.temperature}};
+  if(system) body.systemInstruction={parts:[{text:system}]};
+  if(json) body.generationConfig.responseMimeType='application/json';
+  const stream=!!onChunk;
+  const url=`${API}/models/${encodeURIComponent(modelId())}:${stream?'streamGenerateContent?alt=sse':'generateContent'}`;
+  let res;
+  try{ res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.apiKey},body:JSON.stringify(body),signal}); }
+  catch(e){ if(e.name==='AbortError') throw e; throw new Error('Could not reach Gemini. Check your internet connection.'); }
+  if(!res.ok){ let msg='HTTP '+res.status; try{ const j=await res.json(); msg=j.error?.message||msg; }catch(_){}
+    if(res.status===400 && /API key/i.test(msg)) msg='Your API key was rejected. Check it in Settings.';
+    if(res.status===404) msg=`Model "${modelId()}" not found. Pick another one in Settings (tap "Load models").`;
+    if(res.status===429) msg='Rate limit or quota reached. Wait a minute, or switch to a lighter model in Settings.';
+    throw new Error(msg); }
+  const pick=j=>{ const c=j.candidates?.[0]; if(!c){ if(j.promptFeedback?.blockReason) throw new Error('Gemini blocked this request ('+j.promptFeedback.blockReason+').'); return ''; }
+    return (c.content?.parts||[]).filter(p=>p.text && !p.thought).map(p=>p.text).join(''); };
+  if(!stream){ const j=await res.json(); const t=pick(j); if(!t) throw new Error('Gemini returned an empty answer. Try again.'); return t; }
+  const reader=res.body.getReader(), dec=new TextDecoder(); let buf='', full='';
+  for(;;){ const {done,value}=await reader.read(); if(done) break; buf+=dec.decode(value,{stream:true});
+    let k; while((k=buf.indexOf('\n'))>=0){ const line=buf.slice(0,k).trim(); buf=buf.slice(k+1);
+      if(line.startsWith('data:')){ const d=line.slice(5).trim(); if(!d) continue; let j; try{ j=JSON.parse(d);}catch(_){continue;} const t=pick(j); if(t){ full+=t; onChunk(full);} } } }
+  if(!full) throw new Error('Gemini returned an empty answer. Try again.');
+  return full;
+}
+function parseJSON(t){ t=String(t).trim().replace(/^```(?:json)?\s*/,'').replace(/```\s*$/,''); try{ return JSON.parse(t);}catch(e){ const m=t.match(/[\[{][\s\S]*[\]}]/); if(m) return JSON.parse(m[0]); throw new Error('Could not read the AI response. Try again.'); } }
+
+/* ================= documents ================= */
+const WELCOME = `<h1>Welcome to Inkwell ✒️</h1><p>This is your AI writing studio. Here is the 30 second tour:</p><ol><li><b>Select any text</b> and a menu pops up. Pick <i>Improve</i>, <i>Shorter</i>, <i>Formal</i> and so on, or type your own instruction. Only the selected text changes, and you see the changes before you accept them.</li><li>Tap the <b>🎙 button</b> to dictate, or to <b>talk to the AI</b> ("make the second paragraph more confident").</li><li>Open <b>💬 Assistant</b> to chat about your document. It can edit the document for you.</li><li>Switch to <b>Report</b> mode (top bar) for templates, numbered headings, a section checklist, citations and a report reviewer.</li><li>🧰 <b>Tools</b> has word count, a style scan (passive voice, long sentences, filler) and find &amp; replace.</li></ol><p>First, open <b>⚙︎ Settings</b> and paste your Gemini API key. Then try selecting this sentence, which is honestly kind of very wordy and could really be made a lot more better by the AI.</p>`;
+let docs = store.get('docs', null);
+if(!Array.isArray(docs) || !docs.length) docs=[{id:uid(), title:'Welcome to Inkwell', html:WELCOME, mode:'write', updated:Date.now()}];
+let curId = store.get('cur', docs[0].id); if(!docs.find(d=>d.id===curId)) curId=docs[0].id;
+const cur = () => docs.find(d=>d.id===curId);
+const ed = $('#editor');
+let saveT=null;
+function persist(){ const d=cur(); d.html=ed.innerHTML; d.title=$('#docTitle').value||'Untitled'; d.updated=Date.now(); store.set('docs',docs); store.set('cur',curId); $('#saved').textContent='Saved'; }
+function dirty(){ $('#saved').textContent='Saving…'; clearTimeout(saveT); saveT=setTimeout(()=>{persist(); renderDocList();},700); updateCounts(); }
+function loadDoc(id){
+  if(cur()) persist();
+  curId=id; const d=cur(); ed.innerHTML=d.html||''; $('#docTitle').value=d.title||'';
+  setMode(d.mode||'write', true); chatHistory=[]; renderChat(); renderDocList(); updateCounts(); hideBubble(true);
+  store.set('cur',curId);
+}
+function renderDocList(){
+  const L=[...docs].sort((a,b)=>b.updated-a.updated);
+  $('#docList').innerHTML=L.map(d=>`<div class="doc-item ${d.id===curId?'on':''}" data-id="${d.id}"><div style="flex:1;min-width:0"><div class="t">${d.mode==='report'?'📑 ':''}${esc(d.title||'Untitled')}</div><div class="m">${new Date(d.updated).toLocaleString()}</div></div><button class="x" data-dup="${d.id}" title="Duplicate">⧉</button><button class="x" data-del="${d.id}" title="Delete">🗑</button></div>`).join('');
+}
+$('#docList').addEventListener('click', async e=>{
+  const del=e.target.closest('[data-del]'), dup=e.target.closest('[data-dup]'), it=e.target.closest('.doc-item');
+  if(del){ e.stopPropagation(); const d=docs.find(x=>x.id===del.dataset.del); if(!(await confirmBox(`Delete “${d.title}”? This can't be undone.`,'Delete'))) return;
+    docs=docs.filter(x=>x.id!==d.id); if(!docs.length) docs=[{id:uid(),title:'Untitled',html:'',mode:'write',updated:Date.now()}];
+    if(d.id===curId){ curId=docs[0].id; ed.innerHTML=cur().html; $('#docTitle').value=cur().title; setMode(cur().mode||'write',true);} store.set('docs',docs); renderDocList(); return; }
+  if(dup){ e.stopPropagation(); persist(); const d=docs.find(x=>x.id===dup.dataset.dup); const n={...d,id:uid(),title:d.title+' (copy)',updated:Date.now()}; docs.push(n); store.set('docs',docs); loadDoc(n.id); return; }
+  if(it){ loadDoc(it.dataset.id); if(innerWidth<1100) $('#drawer').classList.add('hidden'); }
+});
+$('#newDoc').onclick=()=>{ persist(); const d={id:uid(),title:'Untitled',html:'',mode:'write',updated:Date.now()}; docs.push(d); store.set('docs',docs); loadDoc(d.id); $('#docTitle').select(); if(innerWidth<1100) $('#drawer').classList.add('hidden'); };
+$('#btnDrawer').onclick=()=>$('#drawer').classList.toggle('hidden');
+$('#closeDrawer').onclick=()=>$('#drawer').classList.add('hidden');
+$('#docTitle').addEventListener('input', dirty);
+
+/* ================= editor basics ================= */
+try{ document.execCommand('defaultParagraphSeparator',false,'p'); }catch(e){}
+ed.addEventListener('input', dirty);
+let savedRange=null;          // last selection/caret inside the editor
+function inEditor(n){ return n && ed.contains(n.nodeType===1?n:n.parentNode); }
+document.addEventListener('selectionchange', ()=>{
+  const sel=getSelection(); if(!sel.rangeCount) return;
+  const r=sel.getRangeAt(0);
+  if(inEditor(r.startContainer) && inEditor(r.endContainer)){ savedRange=r.cloneRange(); onSelectionChanged(); }
+});
+function restoreRange(r){ if(!r) return false; ed.focus({preventScroll:true}); const s=getSelection(); s.removeAllRanges(); s.addRange(r); return true; }
+function caretRange(){ if(savedRange) return savedRange.cloneRange(); const r=document.createRange(); r.selectNodeContents(ed); r.collapse(false); return r; }
+function exec(cmd,val=null){ return document.execCommand(cmd,false,val); }
+function insertHtmlAt(range, html){ restoreRange(range); if(html) exec('insertHTML', html); else exec('delete'); dirty(); }
+function selectionText(){ return savedRange && !savedRange.collapsed ? savedRange.toString() : ''; }
+function rangeToMd(range){ const d=document.createElement('div'); d.appendChild(range.cloneContents()); return {md:htmlToMd(d).trim(), block:!!d.querySelector('p,div,h1,h2,h3,h4,h5,h6,li,ul,ol,blockquote,table,pre')}; }
+function docMd(max=60000){ const m=htmlToMd(ed).trim(); return m.length>max ? m.slice(0,max)+'\n…(document truncated)…' : m; }
+function contextAround(range, nb=2200, na=1000){
+  const b=document.createRange(); b.selectNodeContents(ed); b.setEnd(range.startContainer, range.startOffset);
+  const a=document.createRange(); a.selectNodeContents(ed); a.setStart(range.endContainer, range.endOffset);
+  return {before:b.toString().slice(-nb), after:a.toString().slice(0,na)};
+}
+function setHL(name, range){ try{ if(window.Highlight && CSS.highlights){ if(range) CSS.highlights.set(name,new Highlight(range)); else CSS.highlights.delete(name);} }catch(e){} }
+
+$('#toolbar').addEventListener('mousedown', e=>{ if(e.target.closest('button.tb')) e.preventDefault(); });
+$$('#toolbar [data-cmd]').forEach(b=>b.onclick=()=>{ if(savedRange) restoreRange(savedRange); else ed.focus(); exec(b.dataset.cmd); dirty(); });
+$('#blockSel').onchange=e=>{ restoreRange(caretRange()); exec('formatBlock', '<'+e.target.value+'>'); dirty(); };
+$('#tbLink').onclick=async()=>{ const r=savedRange&&savedRange.cloneRange(); const url=await promptBox('Link address','https://'); if(!url) return; restoreRange(r||caretRange()); if(r && !r.collapsed) exec('createLink',url); else exec('insertHTML',`<a href="${esc(url)}">${esc(url)}</a>`); dirty(); };
+$('#tbTable').onclick=async()=>{ const r=caretRange(); const v=await promptBox('Table size (columns x rows)','3 x 3'); if(!v) return; const m=v.match(/(\d+)\D+(\d+)/)||[0,3,3]; const c=Math.min(+m[1]||3,12), rows=Math.min(+m[2]||3,50);
+  let h='<table><thead><tr>'+Array.from({length:c},(_, i)=>'<th>Header '+(i+1)+'</th>').join('')+'</tr></thead><tbody>'+Array.from({length:rows-1},()=>'<tr>'+'<td><br></td>'.repeat(c)+'</tr>').join('')+'</tbody></table><p><br></p>'; insertHtmlAt(r,h); };
+ed.addEventListener('paste', e=>{
+  const html=e.clipboardData.getData('text/html'), text=e.clipboardData.getData('text/plain');
+  e.preventDefault();
+  if(html) exec('insertHTML', sanitizeHtml(html));
+  else if(/^(#{1,6}\s|\s*[-*]\s|\s*\d+\.\s)|\*\*|\n\|/m.test(text) && text.length>20) exec('insertHTML', mdToHtml(text));
+  else exec('insertText', text);
+  dirty();
+});
+document.addEventListener('keyup', ()=>{ const sel=getSelection(); if(sel.rangeCount && inEditor(sel.anchorNode)){ const b=sel.anchorNode.nodeType===1?sel.anchorNode:sel.anchorNode.parentNode; const blk=b.closest&&b.closest('h1,h2,h3,blockquote,pre,p'); $('#blockSel').value=blk&&ed.contains(blk)?blk.tagName.toLowerCase():'p'; } });
+
+/* ================= text search over the editor ================= */
+const BLOCKS='p,li,h1,h2,h3,h4,h5,h6,blockquote,td,th,pre';
+function buildIndex(){
+  const w=document.createTreeWalker(ed, NodeFilter.SHOW_TEXT); let str='', map=[], prevBlk=null, n, lastSp=true;
+  while((n=w.nextNode())){
+    const blk=n.parentNode.closest(BLOCKS)||ed;
+    if(prevBlk && blk!==prevBlk){ str+='\n'; map.push(null); lastSp=true; }
+    prevBlk=blk;
+    for(let i=0;i<n.data.length;i++){ let ch=n.data[i];
+      if(/\s/.test(ch)){ if(lastSp) continue; ch=' '; lastSp=true; } else lastSp=false;
+      str+=ch; map.push([n,i]); }
+  }
+  return {str,map};
+}
+const normQ = s => s.replace(/[’‘]/g,"'").replace(/[“”]/g,'"');
+function findRange(needle, {from=0, matchCase=false}={}){
+  needle=normQ(String(needle||'').replace(/\s+/g,' ').trim()); if(!needle) return null;
+  const {str,map}=buildIndex(); let hay=normQ(str);
+  if(!matchCase){ hay=hay.toLowerCase(); needle=needle.toLowerCase(); }
+  let idx=hay.indexOf(needle, from); if(idx<0 && from>0) idx=hay.indexOf(needle);
+  if(idx<0){ // try a shorter unique prefix (AI quotes are sometimes slightly off at the end)
+    if(needle.length>40){ const p=needle.slice(0,40); idx=hay.indexOf(p); if(idx<0) return null; let end=hay.indexOf(needle.slice(-12), idx); if(end<0 || end-idx>needle.length*1.5) end=idx+needle.length-12; return mk(idx, Math.min(end+12, map.length)-1, map, idx); }
+    return null; }
+  return mk(idx, idx+needle.length-1, map, idx);
+}
+function mk(s,e,map,idx){ while(s<=e && !map[s]) s++; while(e>=s && !map[e]) e--; if(s>e) return null; const r=document.createRange(); r.setStart(map[s][0],map[s][1]); r.setEnd(map[e][0],map[e][1]+1); r._idx=idx; r._end=e+1; return r; }
+function jumpTo(text, {select=true}={}){
+  const r=findRange(text); if(!r){ toast('Could not find that passage. It may have changed.'); return null; }
+  const el=r.startContainer.parentNode; el.scrollIntoView({block:'center',behavior:'smooth'});
+  setHL('jump', r); setTimeout(()=>setHL('jump',null),1800);
+  if(select){ restoreRange(r); savedRange=r.cloneRange(); }
+  if(innerWidth<900) closeSide();
+  return r;
+}
+
+/* ================= selection bubble ================= */
+const bubble=$('#bubble');
+const BASE_ACTIONS=[
+  {k:'improve', l:'✨ Improve', p:'Improve the writing: clearer, smoother and more engaging, keeping the meaning and length roughly the same.'},
+  {k:'fix', l:'✅ Fix grammar', p:'Fix spelling, grammar and punctuation only. Change nothing else.'},
+  {k:'short', l:'✂️ Shorter', p:'Make it noticeably more concise (about 40% shorter) without losing key information.'},
+  {k:'long', l:'➕ Longer', p:'Expand it with more detail, explanation or examples, about 50% to 100% longer, in the same voice.'},
+  {k:'formal', l:'🎩 Formal', p:'Rewrite in a formal, professional register suitable for business or academic reading.'},
+  {k:'simple', l:'🙂 Simpler', p:'Rewrite in plain, simple language a 14 year old would understand. Short sentences.'},
+  {k:'casual', l:'😎 Casual', p:'Rewrite in a warm, conversational and friendly tone.'},
+  {k:'rephrase', l:'🔁 Rephrase', p:'Say the same thing in a fresh way with different wording and sentence structure.'},
+  {k:'confident', l:'💪 Confident', p:'Make it more confident and persuasive. Remove hedging and weak phrases.'},
+  {k:'bullets', l:'• Bullets', p:'Turn this into a clean bullet list of the key points.'},
+  {k:'para', l:'¶ Paragraph', p:'Turn this into well-flowing prose paragraphs.'},
+  {k:'table', l:'▦ Table', p:'Organise this information into a Markdown table with sensible columns.'},
+  {k:'translate', l:'🌐 Translate', p:null},
+  {k:'explain', l:'💡 Explain', p:null},
+];
+const REPORT_ACTIONS=[
+  {k:'reportify', l:'📑 Report-ready', p:'Rewrite in a precise, objective report register: third person, no fluff, clear topic sentence, evidence-led.'},
+  {k:'evidence', l:'📊 Add evidence hooks', p:'Rewrite so each claim is supported or flagged. Where data or a citation is needed, insert a placeholder like [DATA: what is needed] or [CITE: source needed]. Do not invent numbers.'},
+];
+function renderChips(){
+  const acts=[...(document.body.classList.contains('report')?REPORT_ACTIONS:[]), ...BASE_ACTIONS, ...S.customActions.map((c,i)=>({k:'c'+i,l:'⭐ '+c.name,p:c.prompt,custom:true}))];
+  $('#bChips').innerHTML=acts.map(a=>`<button class="chip ${a.k==='improve'?'ai':''}" data-k="${a.k}">${esc(a.l)}</button>`).join('');
+  $('#bChips')._acts=acts;
+}
+let bubbleState='hidden'; // hidden | menu | busy | result
+let bTarget=null, bLast=null, bResultMd='', bResultBlock=false, bAbort=null, bView='diff', bSelMd='';
+let bubbleTimer=null;
+function onSelectionChanged(){
+  clearTimeout(bubbleTimer);
+  bubbleTimer=setTimeout(()=>{
+    if(bubbleState==='busy'||bubbleState==='result') return;
+    const r=savedRange; const sel=getSelection();
+    const live = sel.rangeCount && !sel.getRangeAt(0).collapsed && inEditor(sel.anchorNode);
+    if(live && r && r.toString().trim().length>0){ showBubble(); } else if(bubbleState==='menu' && !bubble.contains(document.activeElement)) hideBubble();
+    updateSelCount();
+  }, 220);
+}
+function positionBubble(range){
+  const narrow=innerWidth<700;
+  bubble.classList.toggle('sheet', narrow);
+  if(narrow){ bubble.style.top=''; bubble.style.left=''; return; }
+  const rect=(range||savedRange).getBoundingClientRect(); const bw=bubble.offsetWidth, bh=bubble.offsetHeight;
+  let top=rect.bottom+10, left=rect.left+rect.width/2-bw/2;
+  if(top+bh>innerHeight-10) top=Math.max(10, rect.top-bh-10);
+  if(rect.bottom<0 || rect.top>innerHeight) top=Math.min(Math.max(10,top), innerHeight-bh-10);
+  left=Math.max(8, Math.min(left, innerWidth-bw-8));
+  bubble.style.top=top+'px'; bubble.style.left=left+'px';
+}
+function showBubble(){
+  renderChips(); bubbleState='menu';
+  $('#bMenu').classList.remove('hidden'); $('#bRes').classList.add('hidden');
+  bubble.classList.remove('hidden'); positionBubble(savedRange); $('#fab').classList.add('hidden');
+}
+function hideBubble(force){
+  if(!force && bubbleState==='busy') return;
+  if(bAbort) { bAbort.abort(); bAbort=null; }
+  bubbleState='hidden'; bubble.classList.add('hidden'); setHL('ai-target',null); bTarget=null; $('#bInput').value='';
+  $('#fab').classList.remove('hidden');
+}
+bubble.addEventListener('mousedown', e=>{ if(!e.target.closest('input,textarea')) e.preventDefault(); });
+$('#editorWrap').addEventListener('scroll', ()=>{ if(bubbleState!=='hidden' && (bTarget||savedRange)) positionBubble(bTarget||savedRange); });
+addEventListener('resize', ()=>{ if(bubbleState!=='hidden') positionBubble(bTarget||savedRange); });
+document.addEventListener('mousedown', e=>{
+  if(bubbleState==='menu' && !bubble.contains(e.target) && !ed.contains(e.target)) hideBubble();
+});
+$('#bChips').addEventListener('click', e=>{
+  const b=e.target.closest('.chip'); if(!b) return; const a=$('#bChips')._acts.find(x=>x.k===b.dataset.k);
+  if(a.k==='translate'){ const t=selectionText(); const to=isBangla(t)?'English':'Bangla (Bengali, natural and standard, not overly formal)'; runSelection('Translate into '+to+'. Keep meaning, tone and formatting.', '🌐 Translate → '+(isBangla(t)?'English':'বাংলা')); return; }
+  if(a.k==='explain'){ const t=selectionText(); hideBubble(); openSide('assistant'); sendChat('Explain this part of my document simply, and tell me if anything in it is unclear or weak:\n\n"'+t.slice(0,3000)+'"', {noEdit:true}); return; }
+  runSelection(a.p, a.l);
+});
+$('#bGo').onclick=()=>{ const v=$('#bInput').value.trim(); if(v) runSelection(v, '✍️ '+v); };
+$('#bInput').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#bGo').click(); } if(e.key==='Escape') hideBubble(); });
+$('#bMic').onclick=()=>startVoice('selection');
+
+async function runSelection(instruction, label, opts={}){
+  const range=(opts.range||bTarget||savedRange); if(!range || range.collapsed){ toast('Select some text first'); return; }
+  bTarget=range.cloneRange(); setHL('ai-target', bTarget);
+  const {md:selMd, block}=rangeToMd(bTarget); bSelMd=selMd;
+  const {before, after}=contextAround(bTarget);
+  bLast={instruction,label,audio:opts.audio};
+  bubbleState='busy'; bubble.classList.remove('hidden'); $('#bMenu').classList.add('hidden'); $('#bRes').classList.remove('hidden');
+  $('#bLabel').textContent=label; $('#bSpin').classList.remove('hidden'); $('#bDiff').textContent=''; $$('#bRes .row .btn').forEach(b=>b.disabled=b.id!=='bDiscard');
+  positionBubble(bTarget);
+  const report=document.body.classList.contains('report');
+  const system=`You are an expert editor working inside a document editor. The user selected a passage and wants ONLY that passage changed.
+Return ONLY the replacement for the selected passage, in Markdown (keep existing formatting such as **bold**, lists or headings when it makes sense). No preamble, no explanation, no quotation marks around it, no code fences.
+It must fit seamlessly between the text before and after it. Keep the original language unless told to translate.${report?'\nThis is a formal report ('+reportTypeName()+'). Keep a professional report register.':''}${styleRules()}`;
+  const parts=[{text:`TEXT BEFORE THE SELECTION (context only, do not repeat):\n"""${before}"""\n\nSELECTED PASSAGE (rewrite this):\n"""${selMd}"""\n\nTEXT AFTER THE SELECTION (context only, do not repeat):\n"""${after}"""\n\nINSTRUCTION: ${opts.audio?'The instruction is spoken in the attached audio recording. Follow it.':instruction}`}];
+  if(opts.audio) parts.push({inlineData:opts.audio});
+  bAbort=new AbortController();
+  try{
+    const out=await gemini({system, parts, signal:bAbort.signal, onChunk:t=>{ $('#bDiff').textContent=cleanAI(t); }});
+    bResultMd=cleanAI(out); bResultBlock=block;
+    bubbleState='result'; renderDiff(); $$('#bRes .row .btn').forEach(b=>b.disabled=false);
+  }catch(e){
+    if(e.name==='AbortError') return;
+    bubbleState='result'; $('#bDiff').innerHTML='<span style="color:var(--bad)">⚠️ '+esc(e.message)+'</span>'; $('#bRetry').disabled=false; $('#bDiscard').disabled=false;
+  }finally{ $('#bSpin').classList.add('hidden'); bAbort=null; positionBubble(bTarget); }
+}
+function plain(md){ return String(md).replace(/\*\*|__|~~|`/g,'').replace(/(^|\s)[*_](\S)/g,'$1$2').replace(/(\S)[*_](\s|$)/g,'$1$2').replace(/^#{1,6}\s+/gm,''); }
+function wordDiff(a,b){
+  const A=a.split(/(\s+)/), B=b.split(/(\s+)/);
+  if(A.length*B.length>2500000) return '<del>'+esc(a)+'</del> <ins>'+esc(b)+'</ins>';
+  const n=A.length, m=B.length, dp=Array.from({length:n+1},()=>new Uint32Array(m+1));
+  for(let i=n-1;i>=0;i--) for(let j=m-1;j>=0;j--) dp[i][j]=A[i]===B[j]?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+  let i=0,j=0,out='',dq='',iq='';
+  const flush=()=>{ if(dq.trim()) out+='<del>'+esc(dq)+'</del>'; else out+=esc(dq); if(iq.trim()) out+='<ins>'+esc(iq)+'</ins>'; else if(!dq) out+=esc(iq); dq=iq=''; };
+  while(i<n&&j<m){ if(A[i]===B[j]){ flush(); out+=esc(A[i]); i++; j++; } else if(dp[i+1][j]>=dp[i][j+1]) dq+=A[i++]; else iq+=B[j++]; }
+  while(i<n) dq+=A[i++]; while(j<m) iq+=B[j++]; flush(); return out;
+}
+function renderDiff(){
+  if(bView==='diff'){ $('#bDiff').innerHTML=wordDiff(plain(bSelMd), plain(bResultMd)); $('#bView').textContent='👁 clean view'; }
+  else { $('#bDiff').textContent=plain(bResultMd); $('#bView').textContent='± show changes'; }
+}
+$('#bView').onclick=()=>{ if(bubbleState!=='result') return; bView=bView==='diff'?'clean':'diff'; renderDiff(); };
+function mdForRange(md, block){ const inl=!block?mdInline(md):null; return inl!==null && inl!==undefined ? inl : mdToHtml(md); }
+$('#bAccept').onclick=()=>{ if(!bTarget||!bResultMd) return; const r=bTarget; const html=mdForRange(bResultMd, bResultBlock); hideBubble(true); insertHtmlAt(r, html); toast('Replaced', {label:'Undo', fn:()=>{ ed.focus(); exec('undo'); dirty(); }}); };
+$('#bInsertBelow').onclick=()=>{ if(!bTarget||!bResultMd) return; const r=bTarget.cloneRange(); const blk=(r.endContainer.nodeType===1?r.endContainer:r.endContainer.parentNode).closest(BLOCKS.replace(',td,th',''))||null;
+  const after=document.createRange(); if(blk && ed.contains(blk)){ after.setStartAfter(blk); after.collapse(true);} else { after.setStart(r.endContainer,r.endOffset); after.collapse(true); }
+  hideBubble(true); insertHtmlAt(after, mdToHtml(bResultMd)); toast('Inserted below'); };
+$('#bRetry').onclick=()=>{ if(bLast) runSelection(bLast.instruction+' (Give a different version from before.)', bLast.label, {audio:bLast.audio}); };
+$('#bCopy').onclick=()=>copyText(plain(bResultMd));
+$('#bDiscard').onclick=()=>{ const r=bTarget; hideBubble(true); if(r) restoreRange(r); };
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'){ if(bubbleState!=='hidden'){ hideBubble(true); } $('#fabMenu').classList.add('hidden'); }
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='k'){ if(selectionText()){ e.preventDefault(); showBubble(); setTimeout(()=>$('#bInput').focus(),20);} }
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); persist(); toast('Saved on this device'); }
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='f'){ e.preventDefault(); openSide('writing'); const t=selectionText(); if(t) $('#findIn').value=t; $('#findIn').focus(); }
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='m'){ e.preventDefault(); startVoice(selectionText()?'selection':'agent'); }
+  if((e.ctrlKey||e.metaKey) && e.shiftKey && e.key.toLowerCase()==='d'){ e.preventDefault(); startVoice('dictate'); }
+  if(bubbleState==='result' && e.key==='Enter' && (e.ctrlKey||e.metaKey)){ e.preventDefault(); $('#bAccept').click(); }
+});
+
+/* ================= side panel ================= */
+function openSide(tab){
+  $('#side').classList.remove('hidden');
+  $$('.tabs [data-tab]').forEach(b=>b.classList.toggle('on', b.dataset.tab===tab));
+  $$('#side .pane').forEach(p=>p.classList.toggle('hidden', p.id!=='pane-'+tab));
+  store.set('tab',tab);
+  if(tab==='writing') refreshWriting();
+  if(tab==='report') refreshReport();
+  if(tab==='ai') renderCustom();
+  if(tab==='assistant'){ updateChatCtx(); }
+}
+function closeSide(){ $('#side').classList.add('hidden'); store.set('tab',null); }
+$$('[data-open]').forEach(b=>b.onclick=()=>{ const t=b.dataset.open; if(!$('#side').classList.contains('hidden') && $('#pane-'+t) && !$('#pane-'+t).classList.contains('hidden')) closeSide(); else openSide(t); });
+$$('.tabs [data-tab]').forEach(b=>b.onclick=()=>openSide(b.dataset.tab));
+$('#closeSide').onclick=closeSide;
+
+function resultCard(container, {title, md, html, buttons=[]}){
+  const c=document.createElement('div'); c.className='result';
+  c.innerHTML=`<div class="title" style="font-weight:700;margin-bottom:6px">${esc(title)}</div><div class="md">${html ?? mdToHtml(md)}</div><div class="row" style="margin-top:8px"></div>`;
+  const row=$('.row',c);
+  buttons.forEach(b=>{ const x=document.createElement('button'); x.className='btn small'+(b.primary?' primary':''); x.textContent=b.label; x.onclick=()=>b.fn(c); row.appendChild(x); });
+  const close=document.createElement('button'); close.className='btn small ghost'; close.textContent='Dismiss'; close.style.marginLeft='auto'; close.onclick=()=>c.remove(); row.appendChild(close);
+  container.prepend(c); return c;
+}
+function loadingCard(container, title){ const c=document.createElement('div'); c.className='result'; c.innerHTML='<div class="row"><span class="spin"></span> '+esc(title)+'</div><div class="md muted small" style="margin-top:6px"></div>'; container.prepend(c); return c; }
+async function withLoading(container, title, fn){
+  const l=loadingCard(container,title);
+  try{ const r=await fn(t=>{ $('.md',l).textContent=t; }); l.remove(); return r; }
+  catch(e){ l.remove(); const er=document.createElement('div'); er.className='issue'; er.innerHTML='⚠️ '+esc(e.message); container.prepend(er); setTimeout(()=>er.remove(),9000); return null; }
+}
+
+/* ================= AI tools (doc-wide) ================= */
+const insertBtns = (md) => [
+  {label:'Insert at cursor', primary:true, fn:()=>{ insertHtmlAt(caretRange(), mdToHtml(md)); toast('Inserted'); }},
+  {label:'Copy', fn:()=>copyText(md)}
+];
+$('#genBtn').onclick=async()=>{
+  const p=$('#genPrompt').value.trim(); if(!p) return toast('Tell me what to write first');
+  const {before,after}=contextAround(caretRange(),3000,800);
+  const md=await withLoading($('#aiOut'),'Writing…', on=>gemini({system:`You write content to be inserted into the user's document at the cursor. Return only the new content in Markdown, no preamble.${document.body.classList.contains('report')?' The document is a formal report.':''}${styleRules()}`,
+    parts:[{text:`Document text before cursor:\n"""${before}"""\nText after cursor:\n"""${after}"""\n\nWrite: ${p}`}], onChunk:t=>on(cleanAI(t))}));
+  if(md) resultCard($('#aiOut'),{title:'✍️ Draft', md:cleanAI(md), buttons:insertBtns(cleanAI(md))});
+};
+$('#contBtn').onclick=()=>continueWriting();
+async function continueWriting(){
+  const r=caretRange(); const {before,after}=contextAround(r,5000,600);
+  if(!before.trim()) return toast('Write a little first, then I can continue it');
+  openSide('ai');
+  const md=await withLoading($('#aiOut'),'Continuing…', on=>gemini({system:'Continue the user\'s text from exactly where the cursor is, in the same voice, language and style. Write about one to two paragraphs. Return only the continuation in Markdown.'+styleRules(),
+    parts:[{text:`Text before cursor:\n"""${before}"""\nText after cursor (if any):\n"""${after}"""`}], onChunk:t=>on(cleanAI(t))}));
+  if(md) resultCard($('#aiOut'),{title:'↪ Continuation', md:cleanAI(md), buttons:insertBtns(cleanAI(md))});
+}
+$('#sumBtn').onclick=async()=>{
+  const d=docMd(); if(d.length<50) return toast('The document is too short to summarize');
+  const md=await withLoading($('#aiOut'),'Summarizing…', on=>gemini({system:'Summarize the document: a 2 sentence gist, then 3 to 6 key points as bullets. Markdown only.'+styleRules(), parts:[{text:d}], onChunk:t=>on(t)}));
+  if(md) resultCard($('#aiOut'),{title:'📝 Summary', md:cleanAI(md), buttons:insertBtns(cleanAI(md))});
+};
+$('#titleBtn').onclick=async()=>{
+  const d=docMd(20000); if(d.length<50) return toast('Write a bit more first');
+  const md=await withLoading($('#aiOut'),'Thinking of titles…', ()=>gemini({system:'Suggest 6 strong titles for this document in varied styles (clear, catchy, formal). Return a Markdown numbered list only.'+styleRules(), parts:[{text:d}]}));
+  if(md){ const c=resultCard($('#aiOut'),{title:'🏷 Title ideas (tap one to use it)', md:cleanAI(md)});
+    $$('li',c).forEach(li=>{ li.style.cursor='pointer'; li.title='Use as title'; li.onclick=()=>{ $('#docTitle').value=li.textContent.replace(/^["“]|["”]$/g,''); dirty(); toast('Title set'); }; }); }
+};
+$('#toneBtn').onclick=async()=>{
+  const d=docMd(); if(d.length<50) return toast('Write a bit more first');
+  const md=await withLoading($('#aiOut'),'Reading the tone…', ()=>gemini({system:'Assess the tone and voice of this document. Give: the overall tone in a few words, how consistent it is, who it seems written for, and up to 4 specific spots (quote a few words) where the tone slips, with a fix. Markdown, short.'+styleRules(), parts:[{text:d}]}));
+  if(md) resultCard($('#aiOut'),{title:'🎯 Tone check', md:cleanAI(md)});
+};
+$('#proofBtn').onclick=async()=>{
+  const d=docMd(); if(d.length<20) return toast('Nothing to proofread yet');
+  const res=await withLoading($('#aiOut'),'Proofreading…', ()=>gemini({json:true, temperature:0.2,
+    system:'You are a meticulous proofreader. Find spelling, grammar, punctuation, word choice and clarity problems. Return JSON: {"issues":[{"original":"exact short excerpt copied character for character from the document (5 to 25 words, enough to be unique)","suggestion":"the corrected version of that same excerpt","reason":"very short reason","type":"spelling|grammar|punctuation|clarity|style"}]}. At most 40 issues. If none, return {"issues":[]}.'+styleRules(),
+    parts:[{text:d}]}));
+  if(!res) return; let j; try{ j=parseJSON(res);}catch(e){ return toast(e.message); }
+  renderProof(j.issues||[]);
+};
+function renderProof(issues){
+  const box=document.createElement('div'); box.className='result';
+  if(!issues.length){ box.innerHTML='<b>✅ No issues found.</b> Nice and clean.'; $('#aiOut').prepend(box); return; }
+  box.innerHTML=`<div class="row"><b>✅ ${issues.length} suggestion${issues.length>1?'s':''}</b><button class="btn small primary" data-all style="margin-left:auto">Apply all</button><button class="btn small ghost" data-x>Dismiss</button></div><div data-list style="margin-top:8px"></div>`;
+  const list=$('[data-list]',box);
+  issues.forEach((it,i)=>{ const d=document.createElement('div'); d.className='issue';
+    d.innerHTML=`<span class="tag">${esc(it.type||'fix')}</span> <span class="muted small">${esc(it.reason||'')}</span><div class="q">${wordDiff(it.original||'', it.suggestion||'')}</div><div class="row"><button class="btn small" data-go>Show</button><button class="btn small primary" data-ap>Apply</button></div>`;
+    $('[data-go]',d).onclick=()=>jumpTo(it.original);
+    $('[data-ap]',d).onclick=()=>{ if(applyReplace(it.original,it.suggestion)){ d.style.opacity=.45; $('[data-ap]',d).disabled=true; } };
+    d._it=it; list.appendChild(d); });
+  $('[data-all]',box).onclick=()=>{ let n=0; $$('.issue',list).forEach(d=>{ if(!$('[data-ap]',d).disabled && applyReplace(d._it.original,d._it.suggestion,true)){ n++; d.style.opacity=.45; $('[data-ap]',d).disabled=true; } }); toast(`Applied ${n} fix${n===1?'':'es'}`, {label:'Undo', fn:()=>{ed.focus(); for(let k=0;k<n;k++) exec('undo'); dirty();}}); };
+  $('[data-x]',box).onclick=()=>box.remove();
+  $('#aiOut').prepend(box);
+}
+function applyReplace(find, rep, quiet){
+  const r=findRange(find); if(!r){ if(!quiet) toast('Could not find that text any more'); return false; }
+  const inl=mdInline(rep); restoreRange(r); exec('insertHTML', inl!=null?inl:esc(rep)); dirty(); return true;
+}
+function renderCustom(){
+  $('#customList').innerHTML=S.customActions.length? S.customActions.map((c,i)=>`<div class="issue"><b>⭐ ${esc(c.name)}</b><div class="muted small">${esc(c.prompt)}</div><button class="btn small danger" data-rm="${i}" style="margin-top:6px">Remove</button></div>`).join('') : '<p class="muted small">No quick actions yet.</p>';
+}
+$('#customList').addEventListener('click', e=>{ const b=e.target.closest('[data-rm]'); if(!b) return; S.customActions.splice(+b.dataset.rm,1); saveSettings(); renderCustom(); });
+$('#caAdd').onclick=()=>{ const n=$('#caName').value.trim(), p=$('#caPrompt').value.trim(); if(!n||!p) return toast('Give it a name and an instruction'); S.customActions.push({name:n,prompt:p}); saveSettings(); $('#caName').value=$('#caPrompt').value=''; renderCustom(); toast('Added to the selection menu'); };
+
+/* ================= assistant (agent) ================= */
+let chatHistory=[]; let chatBusy=false;
+function renderChat(){
+  const log=$('#chatLog'); log.innerHTML='';
+  if(!chatHistory.length) log.innerHTML='<div class="msg sys">Ask anything about your document, or tell me to change it.<br>Try: “tighten the selected paragraph”, “add a conclusion”, “replace every ‘utilize’ with ‘use’”. Tap 🎙 to talk.</div>';
+  chatHistory.forEach(m=>log.appendChild(m.el));
+  log.scrollTop=log.scrollHeight;
+}
+function addMsg(role, text){ const el=document.createElement('div'); el.className='msg '+(role==='user'?'user':'ai'); el.textContent=text; const m={role,text,el}; chatHistory.push(m); if(chatHistory.length===1) $('#chatLog').innerHTML=''; $('#chatLog').appendChild(el); $('#chatLog').scrollTop=1e9; return m; }
+function updateChatCtx(){ const t=selectionText(); $('#chatCtx').textContent=t?`📌 Selection attached (${t.trim().split(/\s+/).length} words)`:''; }
+$('#chatText').addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); $('#chatSend').click(); } });
+$('#chatText').addEventListener('input', e=>{ e.target.style.height='auto'; e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'; });
+$('#chatSend').onclick=()=>{ const t=$('#chatText').value.trim(); if(!t) return; $('#chatText').value=''; $('#chatText').style.height=''; sendChat(t); };
+$('#chatMic').onclick=()=>startVoice('agent');
+
+const AGENT_SYS = () => `You are Inkwell's writing assistant, built into a document editor. You chat with the user about their document and you can edit it directly by returning actions.
+Always reply with JSON only, in this shape:
+{"heard": "if the user's message was audio, a transcript of what they said; otherwise empty string",
+ "reply": "your short, friendly reply in plain text (no Markdown). It may be read aloud, so keep it under 60 words unless they asked a question that needs more.",
+ "actions": [ ... zero or more edit actions ... ]}
+Edit actions:
+- {"type":"replace_selection","markdown":"..."}: replace the user's current selection (only when a selection exists and the request is about it, or says "this", "it", "the selected part").
+- {"type":"insert_at_cursor","markdown":"..."}: insert new content at the cursor.
+- {"type":"append","markdown":"..."}: add content at the end of the document.
+- {"type":"replace_text","find":"an exact excerpt copied character for character from the document, unique, 5 to 40 words","replace":"new text for that excerpt"}: targeted edit anywhere. Use several of these for several spots. For a whole section, find its first sentence and replace generously, or use replace_section.
+- {"type":"replace_section","heading":"exact heading text","markdown":"new body of that section (without the heading)"}
+- {"type":"replace_document","markdown":"..."}: rewrite everything. Only if the user clearly asks for a full rewrite.
+Rules: Put edit content in actions, never in reply. Use Markdown in markdown fields. If the user only asks a question, return "actions": []. Do not invent facts, numbers or sources; use placeholders like [DATA NEEDED] instead. Match the document's language unless told otherwise.${styleRules()}`;
+
+async function sendChat(text, {audio, noEdit}={}){
+  if(chatBusy) return toast('Hang on, still working on the last one');
+  openSide('assistant');
+  const selRange = savedRange && !savedRange.collapsed ? savedRange.cloneRange() : null;
+  const sel = selRange ? rangeToMd(selRange).md : '';
+  const cursorRange = caretRange();
+  const userMsg = audio ? addMsg('user','🎙 …') : addMsg('user', text);
+  const thinking=document.createElement('div'); thinking.className='msg ai'; thinking.innerHTML='<span class="spin"></span>'; $('#chatLog').appendChild(thinking); $('#chatLog').scrollTop=1e9;
+  chatBusy=true;
+  const report=document.body.classList.contains('report');
+  const ctx=`[EDITOR STATE]\nMode: ${report?'Report ('+reportTypeName()+')':'Write'}\nDocument title: ${$('#docTitle').value}\nSelected text: ${sel?'"""'+sel.slice(0,6000)+'"""':'(nothing selected)'}\nText just before the cursor: "${contextAround(cursorRange,200,0).before}"\n\nFULL DOCUMENT (Markdown):\n"""${docMd()}"""\n[END EDITOR STATE]\n\n`;
+  const parts=[{text: ctx + (audio ? 'The user\'s message is in the attached audio. Transcribe it into "heard", then respond.' : 'User: '+text) + (noEdit?'\n(Answer only. Do not return edit actions.)':'')}];
+  if(audio) parts.push({inlineData:audio});
+  const hist=chatHistory.slice(0,-1).filter(m=>m.text && m.text!=='🎙 …').slice(-12).map(m=>({role:m.role==='user'?'user':'model', parts:[{text:m.text}]}));
+  try{
+    const raw=await gemini({system:AGENT_SYS(), parts, history:hist, json:true, temperature:0.5});
+    const j=parseJSON(raw);
+    if(audio){ userMsg.text=j.heard||'(voice message)'; userMsg.el.textContent='🎙 '+userMsg.text; }
+    thinking.remove();
+    const m=addMsg('ai', j.reply||'Done.');
+    const acts=(Array.isArray(j.actions)?j.actions:[]).filter(a=>a&&a.type);
+    if(acts.length && !noEdit) renderActions(m.el, acts, selRange, cursorRange);
+    if(S.speak) speak(j.reply||'');
+  }catch(e){ thinking.remove(); addMsg('ai','⚠️ '+e.message); if(audio){ userMsg.el.textContent='🎙 (voice message)'; } }
+  finally{ chatBusy=false; }
+}
+const ACT_LABEL={replace_selection:'✏️ Replace selection', insert_at_cursor:'➕ Insert at cursor', append:'⤓ Add to end', replace_text:'🔁 Edit passage', replace_section:'📑 Rewrite section', replace_document:'♻️ Rewrite whole document'};
+function renderActions(el, acts, selRange, cursorRange){
+  const box=document.createElement('div'); box.className='act';
+  let applied=0;
+  acts.forEach(a=>{
+    const d=document.createElement('div'); d.className='a';
+    const preview = a.type==='replace_text' ? wordDiff(a.find||'', a.replace||'') : esc(plain(a.markdown||'').slice(0,400));
+    d.innerHTML=`<b>${ACT_LABEL[a.type]||a.type}</b>${a.heading?' · '+esc(a.heading):''}<div class="p">${preview}</div><div class="row"><button class="btn small primary" data-ap>Apply</button>${a.type==='replace_text'?'<button class="btn small" data-go>Show</button>':''}</div>`;
+    const apBtn=$('[data-ap]',d);
+    const doApply=async()=>{ const ok=await applyAction(a, selRange, cursorRange); if(ok){ apBtn.textContent='Applied ✓'; apBtn.disabled=true; applied++; } return ok; };
+    apBtn.onclick=doApply;
+    if($('[data-go]',d)) $('[data-go]',d).onclick=()=>jumpTo(a.find,{select:false});
+    d._apply=doApply; d._type=a.type; box.appendChild(d);
+  });
+  el.appendChild(box); $('#chatLog').scrollTop=1e9;
+  if(S.autoApply){ (async()=>{ let n=0; for(const d of box.children){ if(d._type==='replace_document') continue; if(await d._apply()) n++; } if(n) toast(`Applied ${n} edit${n>1?'s':''}`, {label:'Undo', fn:()=>{ ed.focus(); for(let k=0;k<n;k++) exec('undo'); dirty(); }}); })(); }
+}
+async function applyAction(a, selRange, cursorRange){
+  const html=mdToHtml(a.markdown||'');
+  switch(a.type){
+    case 'replace_selection': {
+      if(!selRange){ toast('There was no selection, inserted at cursor instead'); insertHtmlAt(cursorRange, html); return true; }
+      const block=rangeToMd(selRange).block; insertHtmlAt(selRange, mdForRange(a.markdown, block)); return true; }
+    case 'insert_at_cursor': insertHtmlAt(cursorRange, html); return true;
+    case 'append': { const r=document.createRange(); r.selectNodeContents(ed); r.collapse(false); insertHtmlAt(r, html); return true; }
+    case 'replace_text': return applyReplace(a.find, a.replace||'');
+    case 'replace_section': { const r=sectionBodyRange(a.heading); if(!r){ toast('Could not find the heading “'+(a.heading||'')+'”'); return false; } insertHtmlAt(r, html); return true; }
+    case 'replace_document': { if(!(await confirmBox('Replace the whole document with the AI\'s version? You can undo with Ctrl+Z.','Replace'))) return false; const r=document.createRange(); r.selectNodeContents(ed); insertHtmlAt(r, html); return true; }
+  }
+  return false;
+}
+
+/* ================= voice ================= */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let voiceMode=null, recorder=null, recChunks=[], recStream=null, browserRec=null, vTimer=null, vStart=0, vCancelled=false, levelRAF=null, audioCtx=null;
+$('#fab').onclick=()=>{ $('#vSel').classList.toggle('hidden', !selectionText()); $('#fabMenu').classList.toggle('hidden'); };
+$('#fabMenu').addEventListener('mousedown', e=>e.preventDefault());
+$('#vDictate').onclick=()=>{ $('#fabMenu').classList.add('hidden'); startVoice('dictate'); };
+$('#vAgent').onclick=()=>{ $('#fabMenu').classList.add('hidden'); startVoice('agent'); };
+$('#vSel').onclick=()=>{ $('#fabMenu').classList.add('hidden'); startVoice('selection'); };
+document.addEventListener('mousedown', e=>{ if(!$('#fabMenu').contains(e.target) && e.target!==$('#fab')) $('#fabMenu').classList.add('hidden'); });
+
+async function startVoice(mode){
+  if(voiceMode) return;
+  if(mode==='selection' && !selectionText()){ toast('Select the text you want to change first'); return; }
+  if(mode!=='dictate' && !S.apiKey){ openSettings(); toast('Add your Gemini API key first'); return; }
+  voiceMode=mode; vCancelled=false;
+  const selRange = mode==='selection' ? (bTarget||savedRange).cloneRange() : null;
+  if(selRange) setHL('ai-target', selRange);
+  $('#vTitle').textContent = {dictate:'Dictating', agent:'Talking to the AI', selection:'Say how to change the selection'}[mode];
+  $('#vLive').textContent = mode==='dictate' ? 'Speak naturally. Say “new paragraph” for a new paragraph.' : (mode==='agent' ? 'e.g. “Make the intro shorter and add a line about costs.”' : 'e.g. “Make this sound more confident.”');
+  $('#voice').classList.remove('hidden'); $('#fab').classList.add('hidden');
+  vStart=Date.now(); clearInterval(vTimer); vTimer=setInterval(()=>{ const s=Math.floor((Date.now()-vStart)/1000); $('#vTime').textContent=Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); },500);
+  voiceSelRange=selRange;
+  if(mode==='dictate' && S.dictEngine==='browser' && SR){ startBrowserDictation(); return; }
+  try{
+    recStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
+  }catch(e){ endVoiceUI(); toast(location.protocol==='file:'||!window.isSecureContext ? 'Microphone needs the app to be opened over https (see the setup guide).' : 'Microphone permission was denied.'); return; }
+  meter(recStream);
+  recChunks=[]; recorder=new MediaRecorder(recStream);
+  recorder.ondataavailable=e=>{ if(e.data.size) recChunks.push(e.data); };
+  recorder.onstop=onRecorded; recorder.start(250);
+}
+let voiceSelRange=null;
+function meter(stream){
+  try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); const src=audioCtx.createMediaStreamSource(stream); const an=audioCtx.createAnalyser(); an.fftSize=512; src.connect(an); const buf=new Uint8Array(an.fftSize);
+    const tick=()=>{ an.getByteTimeDomainData(buf); let mx=0; for(const v of buf) mx=Math.max(mx,Math.abs(v-128)); $('#voiceLevel i').style.width=Math.min(100,mx*1.6)+'%'; levelRAF=requestAnimationFrame(tick); }; tick(); }catch(e){}
+}
+function endVoiceUI(){
+  clearInterval(vTimer); cancelAnimationFrame(levelRAF); $('#voiceLevel i').style.width='0';
+  try{ audioCtx&&audioCtx.close(); }catch(e){} audioCtx=null;
+  if(recStream){ recStream.getTracks().forEach(t=>t.stop()); recStream=null; }
+  $('#voice').classList.add('hidden'); if(bubbleState==='hidden') $('#fab').classList.remove('hidden');
+  if(voiceMode==='selection' && bubbleState==='hidden') setHL('ai-target',null);
+  voiceMode=null;
+}
+$('#vStop').onclick=()=>{ if(browserRec){ browserRec._stop=true; browserRec.stop(); return; } if(recorder && recorder.state!=='inactive') recorder.stop(); };
+$('#vCancel').onclick=()=>{ vCancelled=true; if(browserRec){ browserRec._stop=true; browserRec.abort(); } if(recorder && recorder.state!=='inactive') recorder.stop(); else endVoiceUI(); };
+async function onRecorded(){
+  const mode=voiceMode; const blob=new Blob(recChunks,{type:recorder.mimeType||'audio/webm'}); recorder=null;
+  const selRange=voiceSelRange; endVoiceUI();
+  if(vCancelled || blob.size<1200){ if(!vCancelled) toast('Did not catch anything. Try again a bit closer to the mic.'); return; }
+  let audio; try{ audio=await toWav(blob); }catch(e){ audio={mimeType:(blob.type||'audio/webm').split(';')[0], data:await b64(blob)}; }
+  if(mode==='agent') return sendChat('', {audio});
+  if(mode==='selection'){ return runSelection('', '🎙 Voice edit', {audio, range:selRange}); }
+  if(mode==='dictate'){
+    const r=caretRange(); toast('Transcribing…');
+    try{
+      const t=await gemini({temperature:0.1, system:'You are a transcription engine. Transcribe the audio exactly, with correct punctuation and capitalisation. The speaker may use English, Bangla or a mix; write Bangla in Bangla script. Spoken commands: "new paragraph" means start a new paragraph (output a blank line), "new line" means a line break. '+(S.cleanDictation?'Remove filler words (um, uh, like) and false starts.':'Keep the words as spoken.')+' Output only the transcript.', parts:[{text:'Transcribe this.'},{inlineData:audio}]});
+      insertDictation(r, cleanAI(t));
+    }catch(e){ toast(e.message); }
+  }
+}
+function b64(blob){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(',')[1]); fr.onerror=rej; fr.readAsDataURL(blob); }); }
+async function toWav(blob){
+  const ab=await blob.arrayBuffer(); const AC=window.AudioContext||window.webkitAudioContext; const ac=new AC(); const buf=await ac.decodeAudioData(ab); ac.close();
+  const rate=16000; const off=new OfflineAudioContext(1, Math.ceil(buf.duration*rate), rate); const src=off.createBufferSource(); src.buffer=buf; src.connect(off.destination); src.start(); const out=await off.startRendering();
+  const pcm=out.getChannelData(0); const view=new DataView(new ArrayBuffer(44+pcm.length*2));
+  const ws=(o,s)=>{ for(let i=0;i<s.length;i++) view.setUint8(o+i,s.charCodeAt(i)); };
+  ws(0,'RIFF'); view.setUint32(4,36+pcm.length*2,true); ws(8,'WAVE'); ws(12,'fmt '); view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,1,true); view.setUint32(24,rate,true); view.setUint32(28,rate*2,true); view.setUint16(32,2,true); view.setUint16(34,16,true); ws(36,'data'); view.setUint32(40,pcm.length*2,true);
+  for(let i=0;i<pcm.length;i++){ const s=Math.max(-1,Math.min(1,pcm[i])); view.setInt16(44+i*2, s<0?s*0x8000:s*0x7FFF, true); }
+  return {mimeType:'audio/wav', data:await b64(new Blob([view],{type:'audio/wav'}))};
+}
+function insertDictation(range, text){
+  if(!text) return;
+  restoreRange(range);
+  const paras=text.split(/\n\s*\n/);
+  paras.forEach((p,i)=>{ if(i>0) exec('insertParagraph'); const lines=p.split('\n'); lines.forEach((ln,k)=>{ if(k>0) exec('insertLineBreak'); let t=ln.trim(); if(!t) return;
+    const s=getSelection(); const r=s.rangeCount&&s.getRangeAt(0); let prev=''; if(r && r.startContainer.nodeType===3) prev=r.startContainer.data.slice(0,r.startOffset).slice(-1);
+    if(prev && !/\s/.test(prev) && !/^[.,;:!?)]/.test(t)) t=' '+t; exec('insertText', t); }); });
+  const s=getSelection(); if(s.rangeCount) savedRange=s.getRangeAt(0).cloneRange(); dirty();
+}
+function startBrowserDictation(){
+  browserRec=new SR(); browserRec.lang=S.voiceLang; browserRec.continuous=true; browserRec.interimResults=true; browserRec._stop=false;
+  let range=caretRange();
+  browserRec.onresult=e=>{ let interim=''; for(let i=e.resultIndex;i<e.results.length;i++){ const r=e.results[i]; if(r.isFinal){ let t=r[0].transcript.trim();
+        t=t.replace(/\b(new paragraph)\b/gi,'\n\n').replace(/\b(new line)\b/gi,'\n').replace(/\s+(full stop|period)\b/gi,'.').replace(/\s+comma\b/gi,',').replace(/\s+question mark\b/gi,'?');
+        if(t){ if(/^[a-z]/.test(t) && /(^|[.!?]\s*)$/.test(contextAround(range,3,0).before.trim()||'.')) t=t[0].toUpperCase()+t.slice(1); insertDictation(range, t); range=caretRange(); } }
+      else interim+=r[0].transcript; } $('#vLive').textContent=interim||'…'; };
+  browserRec.onerror=e=>{ if(e.error==='not-allowed'){ toast('Microphone permission was denied'); browserRec._stop=true; } else if(e.error==='network'){ toast('Live dictation needs internet. Switching to Gemini dictation.'); S.dictEngine='gemini'; saveSettings(); browserRec._stop=true; } };
+  browserRec.onend=()=>{ if(!browserRec._stop && voiceMode==='dictate'){ try{ browserRec.start(); }catch(e){} return; } browserRec=null; endVoiceUI(); };
+  try{ browserRec.start(); }catch(e){ browserRec=null; endVoiceUI(); toast('Could not start the microphone'); }
+}
+function speak(text, opts={}){
+  if(!('speechSynthesis' in window) || !text) return;
+  speechSynthesis.cancel();
+  const chunks=String(text).match(/[^.!?।\n]+[.!?।]?/g)||[text];
+  const lang=isBangla(text)?'bn-BD':(S.voiceLang.startsWith('bn')?'en-US':S.voiceLang);
+  const voices=speechSynthesis.getVoices(); const v=voices.find(v=>v.lang.replace('_','-').toLowerCase()===lang.toLowerCase())||voices.find(v=>v.lang.toLowerCase().startsWith(lang.slice(0,2)));
+  chunks.forEach((c,i)=>{ const u=new SpeechSynthesisUtterance(c.trim()); u.lang=lang; if(v) u.voice=v; u.rate=opts.rate||1; if(i===chunks.length-1) u.onend=()=>{ $('#tbRead').textContent='🔊'; }; speechSynthesis.speak(u); });
+}
+$('#tbRead').onclick=()=>{ if(speechSynthesis.speaking){ speechSynthesis.cancel(); $('#tbRead').textContent='🔊'; return; } const t=selectionText()||ed.innerText; if(!t.trim()) return; $('#tbRead').textContent='⏹'; speak(t); };
+
+/* ================= writing tools (non-AI) ================= */
+function countWords(t){ return (t.match(/[\p{L}\p{N}][\p{L}\p{N}\p{M}'’\-]*/gu)||[]).length; }
+function syllables(w){ w=w.toLowerCase().replace(/[^a-z]/g,''); if(!w) return 0; if(w.length<=3) return 1; w=w.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/,'').replace(/^y/,''); const m=w.match(/[aeiouy]{1,2}/g); return m?m.length:1; }
+function stats(){
+  const text=ed.innerText||''; const words=countWords(text);
+  const sentences=(text.match(/[^.!?।\n]+[.!?।]+|[^.!?।\n]{20,}$/gm)||[]).filter(s=>countWords(s)>0);
+  const paras=$$(':scope > p, :scope > li, li',ed).filter(p=>p.innerText.trim()).length || (text.trim()?text.split(/\n\s*\n/).length:0);
+  const engWords=text.match(/[A-Za-z]+/g)||[]; const syl=engWords.reduce((a,w)=>a+syllables(w),0);
+  const sc=Math.max(1,sentences.length), wc=Math.max(1,engWords.length);
+  const flesch=engWords.length>30? Math.round(206.835-1.015*(wc/sc)-84.6*(syl/wc)) : null;
+  const grade=engWords.length>30? Math.max(0,(0.39*(wc/sc)+11.8*(syl/wc)-15.59)).toFixed(1) : null;
+  return {words, chars:text.replace(/\n/g,'').length, sentences:sentences.length, paras, read:Math.max(1,Math.round(words/230)), speak:Math.max(1,Math.round(words/140)), flesch, grade, avg:(words/sc).toFixed(1)};
+}
+function fleschLabel(f){ if(f==null) return '–'; return f>=70?'Easy':f>=60?'Plain':f>=50?'Fairly hard':f>=30?'Hard':'Very hard'; }
+function updateCounts(){
+  const w=countWords(ed.innerText||''); $('#wc').textContent=w.toLocaleString()+' words';
+  if(S.goal>0){ $('#goalWrap').classList.remove('hidden'); const p=Math.min(100,Math.round(w/S.goal*100)); $('#goalBar i').style.width=p+'%'; $('#goalTxt').textContent=p+'% of '+S.goal; } else $('#goalWrap').classList.add('hidden');
+  if(!$('#pane-writing').classList.contains('hidden') && !$('#side').classList.contains('hidden')){ clearTimeout(updateCounts.t); updateCounts.t=setTimeout(renderStats,500); }
+  if(!$('#pane-report').classList.contains('hidden') && !$('#side').classList.contains('hidden')){ clearTimeout(updateCounts.r); updateCounts.r=setTimeout(renderSections,800); }
+}
+function updateSelCount(){ const t=selectionText(); $('#selwc').textContent=t?countWords(t)+' selected':''; if(!$('#pane-assistant').classList.contains('hidden')) updateChatCtx(); }
+function renderStats(){
+  const s=stats();
+  $('#stats').innerHTML=[[s.words.toLocaleString(),'words'],[s.chars.toLocaleString(),'characters'],[s.sentences,'sentences'],[s.paras,'paragraphs'],[s.read+' min','reading time'],[s.speak+' min','speaking time'],[s.flesch??'–','readability · '+fleschLabel(s.flesch)],[s.grade??'–','grade level · '+s.avg+' words/sentence']].map(([b,l])=>`<div class="stat"><b>${b}</b><span>${l}</span></div>`).join('');
+  const stop=new Set('the a an and or but of to in on for with at by from is are was were be been it this that as its into than then so if not no we you they he she i our your their his her them us my me will would can could should may might has have had do does did which who whom what when where why how also about over more most such these those there here very just'.split(' '));
+  const freq={}; (ed.innerText.toLowerCase().match(/[\p{L}][\p{L}\p{M}'’\-]+/gu)||[]).forEach(w=>{ if(w.length>2 && !stop.has(w)) freq[w]=(freq[w]||0)+1; });
+  $('#freq').innerHTML=Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,14).map(([w,n])=>`<span class="tag" style="cursor:pointer" data-w="${esc(w)}">${esc(w)} · ${n}</span>`).join('')||'<span class="muted small">Nothing yet</span>';
+}
+$('#freq').addEventListener('click', e=>{ const t=e.target.closest('[data-w]'); if(t){ $('#findIn').value=t.dataset.w; findNext(); } });
+function refreshWriting(){ $('#goalInput').value=S.goal||''; renderStats(); }
+$('#goalInput').onchange=e=>{ S.goal=Math.max(0,+e.target.value||0); saveSettings(); updateCounts(); };
+
+const IRREG='known|made|done|given|taken|seen|written|shown|found|built|sent|held|brought|kept|told|paid|put|set|chosen|driven|drawn|grown|thrown|spoken|broken|stolen|forgotten|hidden|begun|eaten|fallen|gone|led|left|lost|meant|met|read|said|sold|taught|thought|understood|won|bought|caught|felt|heard|hit|cut|run|become|come|undertaken|overseen|withdrawn';
+const RULES=[
+  {cat:'Passive voice', cls:'warn', re:new RegExp(`\\b(am|is|are|was|were|be|been|being)\\s+(?:\\w+ly\\s+)?(\\w+ed|${IRREG})\\b`,'gi'), fix:'Rewrite this sentence in the active voice, making clear who does what.'},
+  {cat:'Filler word', cls:'', re:/\b(very|really|just|basically|actually|literally|quite|somewhat|totally|definitely|certainly|simply|truly)\b/gi, fix:'Remove filler words and make the wording tighter and stronger.'},
+  {cat:'Wordy phrase', cls:'', re:/\b(in order to|due to the fact that|at this point in time|in the event that|for the purpose of|it is important to note that|it should be noted that|a large number of|in spite of the fact that|with regard to|in terms of|the fact that|is able to|has the ability to|make a decision|take into consideration)\b/gi, fix:'Replace wordy phrases with concise wording.'},
+  {cat:'Weak opening', cls:'', re:/(^|[.!?]\s+)(there (is|are|was|were)|it is)\b/gi, fix:'Rewrite so the sentence opens with a real subject and a strong verb.'},
+  {cat:'Repeated word', cls:'bad', re:/\b(\w+)\s+\1\b/gi, fix:'Fix the accidentally repeated word.'},
+  {cat:'Em dash', cls:'', re:/—/g, fix:'Replace the em dash with a comma, colon, full stop or brackets, whichever reads best.'},
+];
+$('#scanBtn').onclick=()=>{
+  const out=$('#scanOut'); const found=[]; const longs=[];
+  $$(BLOCKS,ed).filter(b=>!b.querySelector(BLOCKS)).forEach(b=>{
+    const t=b.innerText; const sents=t.match(/[^.!?।]+[.!?।]*/g)||[];
+    sents.forEach(s=>{ const st=s.trim(); if(!st) return; const n=countWords(st); if(n>30) longs.push({cat:'Long sentence', cls:'warn', text:st, hint:n+' words', fix:'Split this into two or three shorter, clearer sentences.'});
+      RULES.forEach(r=>{ r.re.lastIndex=0; let m; while((m=r.re.exec(st))){ found.push({cat:r.cat, cls:r.cls, text:st, hit:m[0].trim(), fix:r.fix}); if(!r.re.global) break; } }); });
+  });
+  const all=[...longs,...found]; const groups={}; all.forEach(i=>{ (groups[i.cat]=groups[i.cat]||[]).push(i); });
+  if(!all.length){ out.innerHTML='<div class="issue">✨ Nothing flagged. Clean writing.</div>'; return; }
+  out.innerHTML=Object.entries(groups).map(([cat,items])=>`<details class="card" style="padding:8px 10px" ${items.length<6?'open':''}><summary style="cursor:pointer"><b>${esc(cat)}</b> <span class="tag ${items[0].cls}">${items.length}</span></summary><div style="margin-top:8px">${items.slice(0,60).map((it,k)=>`<div class="issue" data-g="${esc(cat)}" data-k="${k}"><div class="q">${it.hit?esc(it.text).replace(esc(it.hit),'<mark>'+esc(it.hit)+'</mark>'):esc(it.text.length>220?it.text.slice(0,220)+'…':it.text)}</div><div class="row">${it.hint?'<span class="muted small">'+esc(it.hint)+'</span>':''}<button class="btn small" data-go>Show</button><button class="btn small primary" data-fix>✨ Fix with AI</button></div></div>`).join('')}</div></details>`).join('');
+  out._groups=groups;
+};
+$('#scanOut').addEventListener('click', e=>{
+  const iss=e.target.closest('.issue[data-g]'); if(!iss) return; const it=$('#scanOut')._groups[iss.dataset.g][+iss.dataset.k];
+  if(e.target.closest('[data-go]')) jumpTo(it.text);
+  if(e.target.closest('[data-fix]')){ const r=jumpTo(it.text); if(r){ savedRange=r.cloneRange(); runSelection(it.fix, '✨ '+it.cat); } }
+});
+let lastFind=null;
+function findNext(){
+  const q=$('#findIn').value; if(!q) return;
+  const from = lastFind && lastFind.q===q ? lastFind.end : 0;
+  const r=findRange(q,{from, matchCase:$('#findCase').checked});
+  if(!r){ $('#findInfo').textContent='No matches'; lastFind=null; return; }
+  lastFind={q, end:r._end, r}; restoreRange(r); savedRange=r.cloneRange(); r.startContainer.parentNode.scrollIntoView({block:'center'}); setHL('jump',r);
+  $('#findInfo').textContent='';
+}
+$('#findNext').onclick=findNext; $('#findIn').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); findNext(); } });
+$('#findIn').addEventListener('input',()=>{lastFind=null;});
+$('#replOne').onclick=()=>{ const q=$('#findIn').value; if(!q) return; if(!lastFind) findNext(); if(!lastFind) return; restoreRange(lastFind.r); exec('insertText',$('#replIn').value); dirty(); lastFind={q, end:lastFind.r._idx+$('#replIn').value.length}; findNext(); };
+$('#replAll').onclick=()=>{ const q=$('#findIn').value, rep=$('#replIn').value; if(!q) return; let n=0, from=0; for(let g=0; g<2000; g++){ const r=findRange(q,{from,matchCase:$('#findCase').checked}); if(!r || r._idx<from) break; restoreRange(r); exec('insertText',rep); n++; from=r._idx+rep.replace(/\s+/g,' ').length; } setHL('jump',null); dirty(); $('#findInfo').textContent=n+' replaced'; lastFind=null; };
+
+/* ================= report mode ================= */
+const REPORT_TYPES={
+  general:{name:'General report', s:['Executive Summary','Introduction','Background','Methodology','Findings','Discussion','Recommendations','Conclusion','References','Appendices']},
+  business:{name:'Business report', s:['Executive Summary','Introduction','Situation Analysis','Findings','Options Considered','Recommendations','Implementation Plan','Risks and Mitigation','Conclusion','References']},
+  research:{name:'Research paper', s:['Abstract','Introduction','Literature Review','Methodology','Results','Discussion','Limitations','Conclusion','References']},
+  internship:{name:'Internship report', s:['Executive Summary','Introduction','Organization Overview','Role and Responsibilities','Project Work','Analysis','Key Learnings','Recommendations','Conclusion','References','Appendices']},
+  proposal:{name:'Project proposal', s:['Executive Summary','Problem Statement','Objectives','Proposed Solution','Methodology','Timeline','Budget','Expected Outcomes','Risks','Conclusion']},
+  case:{name:'Case study analysis', s:['Executive Summary','Case Background','Problem Identification','Analysis','Alternatives','Recommendation','Implementation','Conclusion','References']},
+  lab:{name:'Lab / technical report', s:['Abstract','Introduction','Materials and Methods','Results','Discussion','Conclusion','References']},
+  policy:{name:'Policy brief', s:['Key Messages','Context','Issue Analysis','Policy Options','Recommendations','Conclusion','References']},
+};
+const HINTS={'Executive Summary':'One page max. Purpose, key findings, main recommendations. Write this last.','Abstract':'150 to 250 words: aim, method, key result, conclusion.','Introduction':'Purpose, scope, and what the reader will find in this report.','Background':'Context the reader needs. Keep it relevant.','Methodology':'How you gathered and analysed information, and why.','Findings':'What you found. Facts and data, no opinions yet.','Results':'Present the results, ideally with tables or figures.','Discussion':'What the findings mean, and how they connect to the purpose.','Recommendations':'Specific, actionable steps. Number them.','Conclusion':'Wrap up. No new information here.','References':'Every source you cited, in one consistent style.','Appendices':'Supporting material: raw data, forms, extra tables.','Literature Review':'What existing work says, and the gap you address.','Limitations':'What constrains your conclusions.','Situation Analysis':'Where things stand now: market, internal, external factors.','Options Considered':'The alternatives, with pros and cons.','Implementation Plan':'Who does what, by when, with what resources.','Risks and Mitigation':'What could go wrong and how to handle it.','Organization Overview':'History, structure, products and position of the organization.','Role and Responsibilities':'Your department, supervisor, and day to day duties.','Project Work':'The main project you worked on and what you produced.','Key Learnings':'Skills and insights gained, linked to coursework.','Problem Statement':'The problem, who it affects, and why it matters now.','Objectives':'Specific, measurable goals.','Proposed Solution':'What you propose and how it solves the problem.','Timeline':'Milestones and dates. A table works well.','Budget':'Itemised costs. A table works well.','Expected Outcomes':'What success looks like and how it will be measured.','Key Messages':'Three to five bullet points a busy reader must take away.'};
+const reportTypeName=()=> (REPORT_TYPES[S.reportType]||REPORT_TYPES.general).name;
+$('#reportType').innerHTML=Object.entries(REPORT_TYPES).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('');
+function setMode(m, silent){
+  document.body.classList.toggle('report', m==='report');
+  $('#modeWrite').classList.toggle('on', m!=='report'); $('#modeReport').classList.toggle('on', m==='report');
+  ed.classList.toggle('numbered', m==='report' && S.numbered);
+  if(cur() && cur().mode!==m){ cur().mode=m; if(!silent) dirty(); }
+  refreshReport();
+  if(!silent && m==='report'){ openSide('report'); toast('Report mode on: templates, numbering, checklist and citations are in 📑 Report'); }
+}
+$('#modeWrite').onclick=()=>setMode('write'); $('#modeReport').onclick=()=>setMode('report');
+$('#turnReportOn').onclick=()=>setMode('report');
+function refreshReport(){
+  const on=document.body.classList.contains('report');
+  $('#reportOff').classList.toggle('hidden', on); $('#reportOn').classList.toggle('hidden', !on);
+  $('#reportType').value=S.reportType; $('#numToggle').checked=S.numbered;
+  if(on) renderSections();
+}
+$('#reportType').onchange=e=>{ S.reportType=e.target.value; saveSettings(); renderSections(); };
+$('#numToggle').onchange=e=>{ S.numbered=e.target.checked; saveSettings(); ed.classList.toggle('numbered', S.numbered); };
+const norm=s=>String(s).toLowerCase().replace(/^[\d.\s]+/,'').replace(/[^\p{L}\p{N} ]/gu,'').trim();
+function headings(){ return $$('h1,h2,h3',ed).filter(h=>!h.closest('.toc')); }
+function sectionBodyRange(headingText){
+  const hs=headings(); const want=norm(headingText||'');
+  const h=hs.find(x=>norm(x.innerText)===want)||hs.find(x=>norm(x.innerText).includes(want)||want.includes(norm(x.innerText))&&norm(x.innerText).length>3);
+  if(!h) return null; const lvl=+h.tagName[1];
+  let end=h.nextElementSibling, last=null; while(end && !(/^H[1-6]$/.test(end.tagName) && +end.tagName[1]<=lvl)){ last=end; end=end.nextElementSibling; }
+  const r=document.createRange();
+  if(!last){ const p=document.createElement('p'); p.innerHTML='<br>'; h.after(p); r.selectNodeContents(p); return r; }
+  r.setStartAfter(h); r.setEndAfter(last); return r;
+}
+function sectionWords(h){ const lvl=+h.tagName[1]; let n=h.nextElementSibling, t=''; while(n && !(/^H[1-6]$/.test(n.tagName) && +n.tagName[1]<=lvl)){ t+=' '+n.innerText; n=n.nextElementSibling; } return countWords(t); }
+function renderSections(){
+  const exp=(REPORT_TYPES[S.reportType]||REPORT_TYPES.general).s; const hs=headings();
+  const used=new Set();
+  let html=exp.map(name=>{ const h=hs.find(x=>{ const a=norm(x.innerText), b=norm(name); return a===b || a.includes(b) || (b.includes(a)&&a.length>3); });
+    if(h) used.add(h);
+    if(!h) return `<div class="check"><span class="tag bad">missing</span><span class="n">${esc(name)}</span><button class="btn small" data-add="${esc(name)}">＋ Add</button></div>`;
+    const w=sectionWords(h); const thin=w<40 && !/references|appendi/i.test(name);
+    return `<div class="check"><span class="tag ${thin?'warn':'ok'}">${thin?'thin':'✓'}</span><span class="n" style="cursor:pointer" data-h="${esc(h.innerText)}">${esc(name)} <span class="muted small">· ${w} words</span></span></div>`;
+  }).join('');
+  const extra=hs.filter(h=>!used.has(h) && h.tagName!=='H1');
+  if(extra.length) html+=`<div class="muted small" style="margin-top:8px">Other headings: ${extra.map(h=>`<a href="#" data-h="${esc(h.innerText)}">${esc(h.innerText)}</a>`).join(', ')}</div>`;
+  $('#sectionList').innerHTML=html;
+}
+$('#sectionList').addEventListener('click', e=>{
+  const h=e.target.closest('[data-h]'); if(h){ e.preventDefault(); const el=headings().find(x=>x.innerText===h.dataset.h); if(el){ el.scrollIntoView({block:'start',behavior:'smooth'}); const r=document.createRange(); r.selectNodeContents(el); r.collapse(false); restoreRange(r); savedRange=r.cloneRange(); if(innerWidth<900) closeSide(); } }
+  const a=e.target.closest('[data-add]'); if(a){ addSection(a.dataset.add); }
+});
+function addSection(name){
+  const exp=(REPORT_TYPES[S.reportType]||REPORT_TYPES.general).s; const idx=exp.indexOf(name);
+  const hs=headings(); let before=null;
+  for(let k=idx+1;k<exp.length && !before;k++){ before=hs.find(x=>norm(x.innerText).includes(norm(exp[k]))); }
+  const html=`<h2>${esc(name)}</h2><p><i>${esc(HINTS[name]||'Write this section.')}</i></p>`;
+  const r=document.createRange(); if(before){ r.setStartBefore(before); r.collapse(true);} else { r.selectNodeContents(ed); r.collapse(false); }
+  insertHtmlAt(r, html); renderSections(); toast('Added “'+name+'”');
+}
+$('#insTemplate').onclick=async()=>{
+  const t=REPORT_TYPES[S.reportType]; const empty=!ed.innerText.trim();
+  if(!empty && !(await confirmBox('Insert the '+t.name+' template at the cursor?','Insert'))) return;
+  const html=(headings().some(h=>h.tagName==='H1')?'':`<h1>${esc($('#docTitle').value||'Report title')}</h1>`)+t.s.map(n=>`<h2>${esc(n)}</h2><p><i>${esc(HINTS[n]||'Write this section.')}</i></p>`).join('');
+  insertHtmlAt(empty? (()=>{const r=document.createRange(); r.selectNodeContents(ed); return r;})() : caretRange(), html); renderSections();
+};
+$('#insCover').onclick=()=>{
+  const r=document.createRange(); r.selectNodeContents(ed); r.collapse(true);
+  const today=new Date().toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'});
+  insertHtmlAt(r, `<div class="cover"><h1>${esc($('#docTitle').value||'Report Title')}</h1><p><i>Subtitle or purpose of the report</i></p><p><b>Prepared for:</b> Name, Organization</p><p><b>Prepared by:</b> Your Name</p><p>${esc(today)}</p></div><p><br></p>`);
+};
+function tocHtml(){
+  const hs=headings().filter(h=>h.tagName!=='H1' && !h.closest('.cover')); let a=0,b=0;
+  const items=hs.map(h=>{ const lvl=h.tagName==='H2'?2:3; let num=''; if(S.numbered && document.body.classList.contains('report')){ if(lvl===2){a++;b=0;num=a+'. ';} else {b++;num=a+'.'+b+' ';} }
+    return `<li style="list-style:none;margin-left:${lvl===3?'1.2em':'0'}">${num}${esc(h.innerText)}</li>`; }).join('');
+  return `<nav class="toc"><p><b>Table of Contents</b></p><ol style="padding-left:0">${items||'<li style="list-style:none">Add some headings first</li>'}</ol></nav>`;
+}
+$('#insToc').onclick=()=>{
+  const ex=$('.toc',ed); if(ex){ const r=document.createRange(); r.selectNode(ex); insertHtmlAt(r, tocHtml()); toast('Table of contents updated'); return; }
+  const cover=$('.cover',ed); const r=document.createRange(); if(cover){ r.setStartAfter(cover); r.collapse(true);} else { const h1=$('h1',ed); if(h1){ r.setStartAfter(h1); r.collapse(true);} else { r.selectNodeContents(ed); r.collapse(true);} }
+  insertHtmlAt(r, tocHtml());
+};
+$('#olBtn').onclick=async()=>{
+  const topic=$('#olTopic').value.trim(); if(!topic) return toast('Add a topic first');
+  const md=await withLoading($('#repOut'),'Building an outline…', on=>gemini({system:`Create a detailed outline for a ${reportTypeName()}. Use Markdown: "# Title", "## Section" headings following the usual structure for this report type, and under each heading 2 to 5 bullet points saying exactly what to cover (with placeholders like [DATA: ...] where evidence is needed). Do not write full prose.${styleRules()}`,
+    parts:[{text:'Topic: '+topic+'\nNotes: '+($('#olNotes').value||'none')}], onChunk:t=>on(cleanAI(t))}));
+  if(md){ const m=cleanAI(md); resultCard($('#repOut'),{title:'🧭 Outline', md:m, buttons:[{label:'Use as document', primary:true, fn:async()=>{ if(ed.innerText.trim() && !(await confirmBox('Replace the current document with this outline?','Replace'))) return; const r=document.createRange(); r.selectNodeContents(ed); insertHtmlAt(r, mdToHtml(m)); const h1=$('h1',ed); if(h1 && !$('#docTitle').value.trim()||$('#docTitle').value==='Untitled') $('#docTitle').value=h1.innerText; renderSections(); }}, ...insertBtns(m)]}); }
+};
+function currentSection(){
+  const r=caretRange(); let n=r.startContainer; n=n.nodeType===1?n:n.parentNode;
+  let blk=n.closest&&n.closest('#editor > *'); if(!blk) return null;
+  let h=blk; while(h && !/^H[1-3]$/.test(h.tagName)) h=h.previousElementSibling;
+  return h;
+}
+$('#draftSec').onclick=async()=>{
+  const h=currentSection(); if(!h) return toast('Put your cursor inside a section (under a heading) first');
+  const r=sectionBodyRange(h.innerText); const d=document.createElement('div'); if(r) d.appendChild(r.cloneContents()); const notes=htmlToMd(d).trim();
+  const md=await withLoading($('#repOut'),'Drafting “'+h.innerText+'”…', on=>gemini({system:`You are drafting one section of a ${reportTypeName()}. Write the body of the section named below as polished report prose (use sub-points, lists or a table only if they genuinely help). Use the user's notes under the heading as the raw material and keep every fact they gave. Do not invent statistics, names or sources: where evidence is needed write [DATA: what is needed] or [CITE]. Do not repeat the heading. Return Markdown only.${styleRules()}`,
+    parts:[{text:`Full report so far (for context):\n"""${docMd(40000)}"""\n\nSECTION TO DRAFT: ${h.innerText}\nUser's notes currently under this heading:\n"""${notes||'(none)'}"""`}], onChunk:t=>on(cleanAI(t))}));
+  if(md){ const m=cleanAI(md); resultCard($('#repOut'),{title:'✍️ '+h.innerText, md:m, buttons:[{label:'Replace section text', primary:true, fn:()=>{ const rr=sectionBodyRange(h.innerText); if(rr){ insertHtmlAt(rr, mdToHtml(m)); toast('Section updated', {label:'Undo',fn:()=>{ed.focus();exec('undo');dirty();}}); } }}, ...insertBtns(m)]}); }
+};
+$('#execSum').onclick=async()=>{
+  const d=docMd(); if(countWords(d)<150) return toast('Write more of the report first (it summarises what is there)');
+  const isAbs=['research','lab'].includes(S.reportType); const name=isAbs?'Abstract':(S.reportType==='policy'?'Key Messages':'Executive Summary');
+  const md=await withLoading($('#repOut'),'Writing the '+name.toLowerCase()+'…', on=>gemini({system:`Write the ${name} for this ${reportTypeName()}. ${isAbs?'150 to 250 words, one paragraph: aim, method, key results, conclusion.':'Under 300 words: purpose, key findings, main recommendations. Short paragraphs, may use a few bullets for recommendations.'} Use only facts in the document. Markdown, no heading.${styleRules()}`, parts:[{text:d}], onChunk:t=>on(cleanAI(t))}));
+  if(md){ const m=cleanAI(md); const has=headings().some(x=>norm(x.innerText).includes(norm(name)));
+    resultCard($('#repOut'),{title:'⭐ '+name, md:m, buttons:[ has?{label:'Put in “'+name+'”', primary:true, fn:()=>{ const r=sectionBodyRange(name); if(r) insertHtmlAt(r, mdToHtml(m)); toast('Inserted'); }}:{label:'Insert at top', primary:true, fn:()=>{ const h1=$('h1',ed); const toc=$('.toc',ed); const r=document.createRange(); const anchor=toc||h1; if(anchor){r.setStartAfter(anchor);} else r.setStart(ed,0); r.collapse(true); insertHtmlAt(r, `<h2>${name}</h2>`+mdToHtml(m)); renderSections(); }}, ...insertBtns(m)]}); }
+};
+$('#reviewBtn').onclick=async()=>{
+  const d=docMd(); if(countWords(d)<100) return toast('Write more of the report first');
+  const raw=await withLoading($('#repOut'),'Reviewing like a tough examiner…', ()=>gemini({json:true, temperature:0.3,
+    system:`You are a demanding examiner reviewing a ${reportTypeName()}. Judge structure, argument, evidence, clarity, tone, formatting and whether recommendations follow from findings. Return JSON:
+{"score": 0-100, "verdict": "one sentence overall", "strengths": ["..."], "issues": [{"severity":"high|medium|low","section":"section name","quote":"exact excerpt copied from the document, 5 to 25 words, or empty if it is about something missing","problem":"what is wrong","fix":"a concrete instruction to fix it"}]}
+Give 5 to 15 issues, most important first.${styleRules()}`, parts:[{text:d}]}));
+  if(!raw) return; let j; try{ j=parseJSON(raw);}catch(e){ return toast(e.message); }
+  const box=document.createElement('div'); box.className='result';
+  const col=j.score>=80?'ok':j.score>=60?'warn':'bad';
+  box.innerHTML=`<div class="row"><b>🧑‍🏫 Review</b><span class="tag ${col}" style="font-size:14px">${esc(j.score)}/100</span><button class="btn small ghost" data-x style="margin-left:auto">Dismiss</button></div><p style="margin:8px 0">${esc(j.verdict||'')}</p>${(j.strengths||[]).length?'<div class="small"><b>Strengths</b><ul style="margin:4px 0 8px;padding-left:18px">'+j.strengths.map(s=>'<li>'+esc(s)+'</li>').join('')+'</ul></div>':''}<div data-list></div>`;
+  (j.issues||[]).forEach(it=>{ const d=document.createElement('div'); d.className='issue';
+    d.innerHTML=`<span class="tag ${it.severity==='high'?'bad':it.severity==='medium'?'warn':''}">${esc(it.severity||'')}</span> <b>${esc(it.section||'')}</b><div style="margin:4px 0">${esc(it.problem||'')}</div>${it.quote?'<div class="q muted">“'+esc(it.quote)+'”</div>':''}<div class="small"><b>Fix:</b> ${esc(it.fix||'')}</div><div class="row" style="margin-top:6px">${it.quote?'<button class="btn small" data-go>Show</button><button class="btn small primary" data-fix>✨ Fix with AI</button>':''}</div>`;
+    if(it.quote){ $('[data-go]',d).onclick=()=>jumpTo(it.quote,{select:false}); $('[data-fix]',d).onclick=()=>{ const r=findRange(it.quote); if(!r) return toast('Could not find that passage'); const blk=(r.startContainer.parentNode).closest(BLOCKS)||r.startContainer.parentNode; const br=document.createRange(); br.selectNodeContents(blk); jumpTo(it.quote,{select:false}); savedRange=br; restoreRange(br); runSelection(it.problem+' Fix: '+it.fix, '✨ Review fix', {range:br}); }; }
+    $('[data-list]',box).appendChild(d); });
+  $('[data-x]',box).onclick=()=>box.remove(); $('#repOut').prepend(box);
+};
+$('#citeBtn').onclick=async()=>{
+  const src=$('#citeIn').value.trim(); if(!src) return toast('Paste some source details first'); const style=$('#citeStyle').value;
+  const md=await withLoading($('#citeOut'),'Formatting…', ()=>gemini({temperature:0.1, system:`Format each source as a reference list entry in ${style} style. Sort as the style requires (alphabetical for author-date styles, numbered for IEEE). Where information is missing, use the style's convention (n.d., Anonymous) and mark guesses with [check]. Never invent DOIs, page numbers or URLs. Then add a line "In-text example:" with one example in-text citation. Markdown only (use *italics* where the style requires).`, parts:[{text:src}]}));
+  if(md){ const m=cleanAI(md); const refs=m.split(/\n+\s*\**In-text example/i)[0].trim();
+    resultCard($('#citeOut'),{title:'📚 '+style, md:m, buttons:[{label:'Add to References', primary:true, fn:()=>{ let r=sectionBodyRange('References'); if(!r){ const end=document.createRange(); end.selectNodeContents(ed); end.collapse(false); insertHtmlAt(end,'<h2>References</h2><p><br></p>'); r=sectionBodyRange('References'); }
+      const body=r.cloneContents(); const tmp=document.createElement('div'); tmp.appendChild(body); const existing=tmp.innerText.trim(); const keep=existing && !/^Every source you cited/i.test(existing)? htmlToMd(tmp).trim()+'\n\n' : '';
+      insertHtmlAt(r, mdToHtml(keep+refs)); toast('Added to References'); renderSections(); }}, {label:'Copy', fn:()=>copyText(refs)}]}); }
+};
+
+/* ================= export / import ================= */
+function download(name, data, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([data],{type})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1500); }
+const safeName=()=>($('#docTitle').value||'document').replace(/[\\/:*?"<>|]+/g,'').trim().slice(0,80)||'document';
+function exportHtmlDoc(forWord){
+  const css=`body{font-family:Georgia,'Times New Roman',serif;font-size:12pt;line-height:1.55;max-width:760px;margin:40px auto;color:#111}h1{font-size:22pt}h2{font-size:16pt;margin-top:20pt}h3{font-size:13pt}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:5px 8px}th{background:#eee}blockquote{border-left:3px solid #999;margin-left:0;padding-left:12px;color:#444}.toc{background:#f4f4f4;padding:10px 16px}.cover{text-align:center;padding:60px 0;page-break-after:always}`;
+  let body=ed.innerHTML;
+  if(document.body.classList.contains('report') && S.numbered){ const t=document.createElement('div'); t.innerHTML=body; let a=0,b=0; [...t.children].forEach(h=>{ if(h.tagName==='H2'){a++;b=0;h.textContent=a+'. '+h.textContent;} if(h.tagName==='H3'){b++;h.textContent=a+'.'+b+' '+h.textContent;} }); body=t.innerHTML; }
+  return `<!DOCTYPE html><html${forWord?' xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"':''}><head><meta charset="utf-8"><title>${esc($('#docTitle').value)}</title><style>${css}</style></head><body>${body}</body></html>`;
+}
+$('#btnExport').onclick=()=>{
+  const m=modal(`<h3>Export & import</h3><p class="muted small" style="margin-top:0">Your documents are saved automatically in this browser on this device.</p>
+  <div class="grid2">
+    <button class="btn" data-e="docx">📄 Word (.doc)</button><button class="btn" data-e="pdf">🖨 PDF (print)</button>
+    <button class="btn" data-e="md">⬇ Markdown (.md)</button><button class="btn" data-e="html">🌐 Web page (.html)</button>
+    <button class="btn" data-e="txt">📃 Plain text (.txt)</button><button class="btn" data-e="copy">📋 Copy as Markdown</button>
+    <button class="btn" data-e="import">📂 Import .txt / .md / .html</button><button class="btn" data-e="backup">💾 Backup all documents</button>
+    <button class="btn" data-e="restore">♻️ Restore a backup</button>
+  </div><div class="foot"><button class="btn" data-x>Close</button></div>`);
+  $('[data-x]',m).onclick=()=>m.remove();
+  m.addEventListener('click', e=>{ const b=e.target.closest('[data-e]'); if(!b) return; const k=b.dataset.e; persist();
+    if(k==='docx') download(safeName()+'.doc', '﻿'+exportHtmlDoc(true), 'application/msword');
+    if(k==='html') download(safeName()+'.html', exportHtmlDoc(false), 'text/html');
+    if(k==='md') download(safeName()+'.md', htmlToMd(ed).trim(), 'text/markdown');
+    if(k==='txt') download(safeName()+'.txt', ed.innerText, 'text/plain');
+    if(k==='copy') copyText(htmlToMd(ed).trim());
+    if(k==='pdf'){ m.remove(); setTimeout(()=>window.print(),100); return; }
+    if(k==='import'){ $('#fileIn').dataset.mode='import'; $('#fileIn').accept='.txt,.md,.markdown,.html,.htm'; $('#fileIn').click(); }
+    if(k==='backup') download('inkwell-backup.json', JSON.stringify({docs, settings:{...S, apiKey:''}},null,1), 'application/json');
+    if(k==='restore'){ $('#fileIn').dataset.mode='restore'; $('#fileIn').accept='.json'; $('#fileIn').click(); }
+    if(k!=='copy') m.remove();
+  });
+};
+$('#fileIn').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return; const text=await f.text();
+  if(e.target.dataset.mode==='restore'){ try{ const j=JSON.parse(text); if(!Array.isArray(j.docs)) throw 0; const ids=new Set(docs.map(d=>d.id)); j.docs.forEach(d=>{ if(ids.has(d.id)) d.id=uid(); docs.push(d); }); store.set('docs',docs); renderDocList(); toast('Restored '+j.docs.length+' document(s)'); }catch(_){ toast('That is not an Inkwell backup file'); } return; }
+  persist(); const html=/\.html?$/i.test(f.name)? sanitizeHtml((text.match(/<body[^>]*>([\s\S]*)<\/body>/i)||[0,text])[1]) : /\.(md|markdown)$/i.test(f.name)? mdToHtml(text) : text.split(/\n\s*\n/).map(p=>'<p>'+esc(p).replace(/\n/g,'<br>')+'</p>').join('');
+  const d={id:uid(), title:f.name.replace(/\.[^.]+$/,''), html, mode:'write', updated:Date.now()}; docs.push(d); store.set('docs',docs); loadDoc(d.id); toast('Imported '+f.name);
+};
+
+/* ================= settings modal ================= */
+function openSettings(){
+  const m=modal(`<h3>Settings</h3>
+  <label class="f">Gemini API key</label>
+  <div class="row"><input type="password" id="sKey" class="grow" style="width:auto" placeholder="Paste your key (starts with AIza…)" value="${esc(S.apiKey)}"><button class="btn small" id="sShow">👁</button></div>
+  <p class="muted small" style="margin:4px 0 0">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. It is stored only in this browser.</p>
+  <label class="f">Model</label>
+  <div class="row"><input type="text" id="sModel" class="grow" style="width:auto" value="${esc(modelId())}" list="modelList"><datalist id="modelList"></datalist><button class="btn small" id="sLoad">Load models</button><button class="btn small" id="sTest">Test</button></div>
+  <p class="muted small" id="sTestOut" style="margin:4px 0 0">Flash models are fast and cheap; Pro models are smarter but slower.</p>
+  <label class="f">Creativity (temperature): <b id="sTv">${S.temperature}</b></label>
+  <input type="range" id="sTemp" min="0" max="1.5" step="0.1" value="${S.temperature}" style="width:100%">
+  <label class="f">House style (applies to every AI edit)</label>
+  <textarea id="sStyle" placeholder="e.g. British spelling. Short paragraphs. Avoid jargon, define any technical term.">${esc(S.styleNotes)}</textarea>
+  <label class="switch"><input type="checkbox" id="sDash" ${S.noEmDash?'checked':''}> Never use em dashes in AI output</label>
+  <label class="switch"><input type="checkbox" id="sAuto" ${S.autoApply?'checked':''}> Assistant applies its edits automatically (you can always Undo)</label>
+  <label class="switch"><input type="checkbox" id="sSpeak" ${S.speak?'checked':''}> Read the assistant's replies aloud</label>
+  <h4 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;color:var(--muted)">Voice</h4>
+  <label class="f">Language you speak</label>
+  <select id="sLang"><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="en-IN">English (India)</option><option value="bn-BD">বাংলা (Bangladesh)</option><option value="bn-IN">বাংলা (India)</option></select>
+  <label class="f">Dictation engine</label>
+  <select id="sEng"><option value="browser">Live, free (browser speech recognition)${SR?'':' · not available in this browser'}</option><option value="gemini">Gemini (more accurate, mixed Bangla + English, uses API)</option></select>
+  <label class="switch"><input type="checkbox" id="sClean" ${S.cleanDictation?'checked':''}> Gemini dictation removes “um”, “uh” and false starts</label>
+  <h4 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;color:var(--muted)">Editor</h4>
+  <div class="grid2"><div><label class="f">Font</label><select id="sFont"><option value="serif">Serif (bookish)</option><option value="sans">Sans (clean)</option></select></div><div><label class="f">Text size</label><input type="number" id="sSize" min="13" max="28" value="${S.fontSize}"></div></div>
+  <div class="foot"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok>Save</button></div>`);
+  $('#sLang',m).value=S.voiceLang; $('#sEng',m).value=S.dictEngine; $('#sFont',m).value=S.font;
+  $('#sShow',m).onclick=()=>{ const i=$('#sKey',m); i.type=i.type==='password'?'text':'password'; };
+  $('#sTemp',m).oninput=e=>$('#sTv',m).textContent=e.target.value;
+  $('#sLoad',m).onclick=async()=>{ const key=$('#sKey',m).value.trim(); if(!key) return toast('Paste your key first'); $('#sTestOut',m).textContent='Loading…';
+    try{ const r=await fetch(API+'/models?pageSize=200',{headers:{'x-goog-api-key':key}}); const j=await r.json(); if(!r.ok) throw new Error(j.error?.message||r.status);
+      const ms=(j.models||[]).filter(x=>(x.supportedGenerationMethods||[]).includes('generateContent') && /gemini/i.test(x.name)).map(x=>x.name.replace('models/',''));
+      $('#modelList',m).innerHTML=ms.map(x=>`<option value="${esc(x)}">`).join(''); $('#sTestOut',m).textContent=ms.length+' models found. Click the Model box to pick one: '+ms.filter(x=>!/tts|image|embedding|live|audio/i.test(x)).slice(0,8).join(', ');
+    }catch(e){ $('#sTestOut',m).textContent='⚠️ '+e.message; } };
+  $('#sTest',m).onclick=async()=>{ const old={...S}; S.apiKey=$('#sKey',m).value.trim(); S.model=$('#sModel',m).value.trim(); $('#sTestOut',m).textContent='Testing…';
+    try{ const t=await gemini({parts:[{text:'Reply with exactly: Connected ✓'}], temperature:0}); $('#sTestOut',m).textContent='✅ '+t.trim()+' ('+modelId()+')'; }catch(e){ $('#sTestOut',m).textContent='⚠️ '+e.message; }
+    S.apiKey=old.apiKey; S.model=old.model; };
+  $('[data-x]',m).onclick=()=>m.remove();
+  $('[data-ok]',m).onclick=()=>{
+    Object.assign(S,{apiKey:$('#sKey',m).value.trim(), model:$('#sModel',m).value.trim()||'gemini-2.5-flash', temperature:+$('#sTemp',m).value, styleNotes:$('#sStyle',m).value,
+      noEmDash:$('#sDash',m).checked, autoApply:$('#sAuto',m).checked, speak:$('#sSpeak',m).checked, voiceLang:$('#sLang',m).value, dictEngine:$('#sEng',m).value, cleanDictation:$('#sClean',m).checked,
+      font:$('#sFont',m).value, fontSize:Math.min(28,Math.max(13,+$('#sSize',m).value||18))});
+    saveSettings(); applyLook(); m.remove(); toast('Settings saved');
+  };
+}
+$('#btnSettings').onclick=openSettings;
+function applyLook(){
+  document.documentElement.dataset.theme=S.theme; ed.classList.toggle('sans', S.font==='sans');
+  document.documentElement.style.setProperty('--doc-size', S.fontSize+'px');
+  $('#modelTag').textContent=S.apiKey? '✨ '+modelId() : '⚠️ No API key, open ⚙︎ Settings';
+  $('#modelTag').style.cursor='pointer'; $('#modelTag').onclick=openSettings;
+}
+$('#tbTheme').onclick=()=>{ S.theme=S.theme==='dark'?'light':'dark'; saveSettings(); applyLook(); };
+$('#tbFocus').onclick=()=>{ document.body.classList.add('focus'); $('#focusExit').classList.remove('hidden'); };
+$('#focusExit').onclick=()=>{ document.body.classList.remove('focus'); $('#focusExit').classList.add('hidden'); };
+$('#tbFind').onclick=()=>{ openSide('writing'); const t=selectionText(); if(t) $('#findIn').value=t; setTimeout(()=>$('#findIn').focus(),50); };
+
+/* ================= boot ================= */
+applyLook();
+ed.innerHTML=cur().html||''; $('#docTitle').value=cur().title||'';
+setMode(cur().mode||'write', true);
+renderDocList(); renderChat(); updateCounts();
+if(innerWidth>=1100) $('#drawer').classList.add('hidden');
+const lastTab=store.get('tab',null); if(lastTab && innerWidth>=900) openSide(lastTab);
+if(!S.apiKey) setTimeout(()=>toast('Welcome! Open ⚙︎ Settings and paste your Gemini API key to switch on the AI.'),600);
+addEventListener('beforeunload', persist);
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden) persist(); });
+</script>
+</body>
+</html>
