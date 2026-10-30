@@ -501,6 +501,7 @@ const DEFAULTS = {apiKey:'', model:'gemini-2.5-flash', temperature:0.7, styleNot
   voiceLang:'en-US', dictEngine:'browser', cleanDictation:false, font:'serif', fontSize:18, theme:'light', goal:0, numbered:true,
   reportType:'general', customActions:[]};
 let S = Object.assign({}, DEFAULTS, store.get('settings', {}));
+S.apiKey=String(S.apiKey||'').replace(/[\s"'`\u200B-\u200D\u2060\uFEFF]/g,'');
 const saveSettings = () => store.set('settings', S);
 
 /* ================= markdown <-> html ================= */
@@ -625,6 +626,7 @@ function sanitizeHtml(html){
   };
   clean(doc.body); return doc.body.innerHTML;
 }
+const cleanKey = k => String(k||'').replace(/[\s"'`\u200B-\u200D\u2060\uFEFF]/g,'');
 const cleanAI = t => String(t||'').replace(/^\s*```(?:markdown|md|text)?\s*\n([\s\S]*?)\n```\s*$/,'$1').replace(/^\s*["“](.*)["”]\s*$/s,'$1').trim();
 
 /* ================= Gemini ================= */
@@ -647,7 +649,8 @@ async function gemini({system, parts, history=[], json=false, temperature, onChu
   try{ res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.apiKey},body:JSON.stringify(body),signal}); }
   catch(e){ if(e.name==='AbortError') throw e; throw new Error('Could not reach Gemini. Check your internet connection.'); }
   if(!res.ok){ let msg='HTTP '+res.status; try{ const j=await res.json(); msg=j.error?.message||msg; }catch(_){}
-    if(res.status===400 && /API key/i.test(msg)) msg='Your API key was rejected. Check it in Settings.';
+    if(/API key|API_KEY/i.test(msg)) msg='Google rejected the API key: "'+msg+'" Fix: Settings, paste a fresh key from aistudio.google.com/apikey.';
+    else if(res.status===403) msg='Access denied by Google: "'+msg+'"';
     if(res.status===404) msg=`Model "${modelId()}" not found. Pick another one in Settings (tap "Load models").`;
     if(res.status===429) msg='Rate limit or quota reached. Wait a minute, or switch to a lighter model in Settings.';
     throw new Error(msg); }
@@ -1477,17 +1480,17 @@ function openSettings(){
   $('#sLang',m).value=S.voiceLang; $('#sEng',m).value=S.dictEngine; $('#sFont',m).value=S.font;
   $('#sShow',m).onclick=()=>{ const i=$('#sKey',m); i.type=i.type==='password'?'text':'password'; };
   $('#sTemp',m).oninput=e=>$('#sTv',m).textContent=e.target.value;
-  $('#sLoad',m).onclick=async()=>{ const key=$('#sKey',m).value.trim(); if(!key) return toast('Paste your key first'); $('#sTestOut',m).textContent='Loading…';
+  $('#sLoad',m).onclick=async()=>{ const key=cleanKey($('#sKey',m).value); if(!key) return toast('Paste your key first'); $('#sTestOut',m).textContent='Loading…';
     try{ const r=await fetch(API+'/models?pageSize=200',{headers:{'x-goog-api-key':key}}); const j=await r.json(); if(!r.ok) throw new Error(j.error?.message||r.status);
       const ms=(j.models||[]).filter(x=>(x.supportedGenerationMethods||[]).includes('generateContent') && /gemini/i.test(x.name)).map(x=>x.name.replace('models/',''));
       $('#modelList',m).innerHTML=ms.map(x=>`<option value="${esc(x)}">`).join(''); $('#sTestOut',m).textContent=ms.length+' models found. Click the Model box to pick one: '+ms.filter(x=>!/tts|image|embedding|live|audio/i.test(x)).slice(0,8).join(', ');
     }catch(e){ $('#sTestOut',m).textContent='⚠️ '+e.message; } };
-  $('#sTest',m).onclick=async()=>{ const old={...S}; S.apiKey=$('#sKey',m).value.trim(); S.model=$('#sModel',m).value.trim(); $('#sTestOut',m).textContent='Testing…';
+  $('#sTest',m).onclick=async()=>{ const old={...S}; S.apiKey=cleanKey($('#sKey',m).value); S.model=$('#sModel',m).value.trim(); $('#sTestOut',m).textContent='Testing…'; if(!/^AIza[\w-]{35}$/.test(S.apiKey)) $('#sTestOut',m).textContent='Testing… (heads up: Gemini keys are usually 39 characters starting with AIza; this one is '+S.apiKey.length+' characters starting with '+S.apiKey.slice(0,4)+')';
     try{ const t=await gemini({parts:[{text:'Reply with exactly: Connected ✓'}], temperature:0}); $('#sTestOut',m).textContent='✅ '+t.trim()+' ('+modelId()+')'; }catch(e){ $('#sTestOut',m).textContent='⚠️ '+e.message; }
     S.apiKey=old.apiKey; S.model=old.model; };
   $('[data-x]',m).onclick=()=>m.remove();
   $('[data-ok]',m).onclick=()=>{
-    Object.assign(S,{apiKey:$('#sKey',m).value.trim(), model:$('#sModel',m).value.trim()||'gemini-2.5-flash', temperature:+$('#sTemp',m).value, styleNotes:$('#sStyle',m).value,
+    Object.assign(S,{apiKey:cleanKey($('#sKey',m).value), model:$('#sModel',m).value.trim()||'gemini-2.5-flash', temperature:+$('#sTemp',m).value, styleNotes:$('#sStyle',m).value,
       noEmDash:$('#sDash',m).checked, autoApply:$('#sAuto',m).checked, speak:$('#sSpeak',m).checked, voiceLang:$('#sLang',m).value, dictEngine:$('#sEng',m).value, cleanDictation:$('#sClean',m).checked,
       font:$('#sFont',m).value, fontSize:Math.min(28,Math.max(13,+$('#sSize',m).value||18))});
     saveSettings(); applyLook(); m.remove(); toast('Settings saved');
