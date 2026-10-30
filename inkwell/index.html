@@ -453,7 +453,7 @@ footer{display:flex;gap:14px;align-items:center;padding:5px 12px;border-top:1px 
 </div>
 <button id="focusExit" class="btn small hidden">Exit focus</button>
 <div id="toast"></div>
-<input type="file" id="fileIn" accept=".txt,.md,.markdown,.html,.htm" class="hidden">
+<input type="file" id="fileIn" accept=".docx,.txt,.md,.markdown,.html,.htm" class="hidden">
 
 <script>
 "use strict";
@@ -1445,8 +1445,91 @@ $('#citeBtn').onclick=async()=>{
       insertHtmlAt(r, mdToHtml(keep+refs)); toast('Added to References'); renderSections(); }}, {label:'Copy', fn:()=>copyText(refs)}]}); }
 };
 
+
+/* ================= .docx import / export ================= */
+const LIBS={JSZip:'https://cdn.jsdelivr.net/npm/jszip@3.10.2/dist/jszip.min.js', mammoth:'https://cdn.jsdelivr.net/npm/mammoth@1.13.0/mammoth.browser.min.js'};
+function need(g){ if(window[g]) return Promise.resolve(window[g]); return new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src=LIBS[g]; sc.onload=()=>res(window[g]); sc.onerror=()=>rej(new Error('Could not load the Word converter. Are you online?')); document.head.appendChild(sc); }); }
+const xe=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'');
+function numberedBodyHtml(){
+  const t=document.createElement('div'); t.innerHTML=ed.innerHTML;
+  if(document.body.classList.contains('report') && S.numbered){ let a=0,b=0; [...t.children].forEach(h=>{ if(h.tagName==='H2'){a++;b=0;h.insertAdjacentText('afterbegin',a+'. ');} if(h.tagName==='H3'){b++;h.insertAdjacentText('afterbegin',a+'.'+b+' ');} }); }
+  return t;
+}
+async function buildDocx(){
+  const JSZip=await need('JSZip'); const root=numberedBodyHtml(); const links=[], nums=[];
+  const run=(t,f)=>{ let pr=''; if(f.code) pr+='<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>'; if(f.b) pr+='<w:b/>'; if(f.i) pr+='<w:i/>'; if(f.s) pr+='<w:strike/>'; if(f.link) pr+='<w:color w:val="1155CC"/>'; if(f.u||f.link) pr+='<w:u w:val="single"/>'; if(f.sup) pr+='<w:vertAlign w:val="superscript"/>'; if(f.sub) pr+='<w:vertAlign w:val="subscript"/>';
+    return `<w:r>${pr?'<w:rPr>'+pr+'</w:rPr>':''}<w:t xml:space="preserve">${xe(t)}</w:t></w:r>`; };
+  function runs(node,fmt={}){ let out='';
+    node.childNodes.forEach(c=>{
+      if(c.nodeType===3){ const t=c.data.replace(/ /g,' ').replace(/\s*\n\s*/g,' '); if(t) out+=run(t,fmt); return; }
+      if(c.nodeType!==1) return; const tag=c.tagName;
+      if(tag==='BR'){ out+='<w:r><w:br/></w:r>'; return; }
+      if(/^(UL|OL|TABLE)$/.test(tag)) return;
+      const f={...fmt}; if(/^(B|STRONG|TH)$/.test(tag)) f.b=1; if(/^(I|EM)$/.test(tag)) f.i=1; if(tag==='U') f.u=1; if(/^(S|STRIKE|DEL)$/.test(tag)) f.s=1; if(tag==='SUP') f.sup=1; if(tag==='SUB') f.sub=1; if(tag==='CODE') f.code=1;
+      if(/^(P|DIV|H\d|BLOCKQUOTE|PRE)$/.test(tag) && out) out+='<w:r><w:br/></w:r>';
+      const href=tag==='A'&&c.getAttribute('href');
+      if(href && /^(https?:|mailto:)/i.test(href)){ const id='rIdL'+(links.length+1); links.push({id,href}); out+=`<w:hyperlink r:id="${id}">`+runs(c,{...f,link:1})+'</w:hyperlink>'; return; }
+      out+=runs(c,f); });
+    return out; }
+  const alignOf=el=>{ const a=(el.style&&el.style.textAlign)||(el.getAttribute&&el.getAttribute('align'))||''; return a==='center'?'center':a==='right'?'right':a==='justify'?'both':''; };
+  const para=(inner,{style,numId,ilvl=0,bdr='',align}={})=>{ let pPr=''; if(style) pPr+=`<w:pStyle w:val="${style}"/>`; if(numId) pPr+=`<w:numPr><w:ilvl w:val="${ilvl}"/><w:numId w:val="${numId}"/></w:numPr>`; pPr+=bdr; if(align) pPr+=`<w:jc w:val="${align}"/>`; return `<w:p>${pPr?'<w:pPr>'+pPr+'</w:pPr>':''}${inner}</w:p>`; };
+  function list(el,lvl){ if(el.closest('.toc')) return [...el.children].map(li=>para(runs(li),{style:'TableText'})).join('');
+    nums.push(el.tagName==='OL'?1:0); const numId=nums.length; let out='';
+    [...el.children].forEach(li=>{ if(li.tagName!=='LI') return; out+=para(runs(li),{numId,ilvl:Math.min(lvl,8)}); li.querySelectorAll(':scope > ul, :scope > ol').forEach(sub=>out+=list(sub,lvl+1)); });
+    return out; }
+  function table(tb){ const rows=[...tb.querySelectorAll('tr')]; if(!rows.length) return ''; const span=c=>Math.max(1,+c.getAttribute('colspan')||1);
+    const cols=Math.max(1,...rows.map(r=>[...r.children].reduce((a,c)=>a+span(c),0))); const w=Math.floor(9026/cols);
+    const b='w:val="single" w:sz="4" w:space="0" w:color="999999"';
+    let x=`<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders><w:top ${b}/><w:left ${b}/><w:bottom ${b}/><w:right ${b}/><w:insideH ${b}/><w:insideV ${b}/></w:tblBorders><w:tblCellMar><w:left w:w="100" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>${`<w:gridCol w:w="${w}"/>`.repeat(cols)}</w:tblGrid>`;
+    rows.forEach(r=>{ x+='<w:tr>'; let used=0;
+      [...r.children].forEach(c=>{ const sp=span(c); used+=sp; const th=c.tagName==='TH'||c.closest('thead'); x+=`<w:tc><w:tcPr><w:tcW w:w="${w*sp}" w:type="dxa"/>${sp>1?`<w:gridSpan w:val="${sp}"/>`:''}${th?'<w:shd w:val="clear" w:color="auto" w:fill="EEEEEE"/>':''}</w:tcPr>${para(runs(c,th?{b:1}:{}),{style:'TableText'})}</w:tc>`; });
+      for(;used<cols;used++) x+=`<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/></w:tcPr><w:p/></w:tc>`;
+      x+='</w:tr>'; });
+    return x+'</w:tbl><w:p/>'; }
+  function blocks(el,ctx={}){ let out='';
+    el.childNodes.forEach(n=>{
+      if(n.nodeType===3){ if(n.data.trim()) out+=para(run(n.data.trim(),{}),{align:ctx.align}); return; }
+      if(n.nodeType!==1) return; const t=n.tagName;
+      if(/^H[1-6]$/.test(t)){ out+=para(runs(n),{style:'Heading'+Math.min(+t[1],4), align:ctx.align||alignOf(n)}); return; }
+      if(t==='UL'||t==='OL'){ out+=list(n,0); return; }
+      if(t==='TABLE'){ out+=table(n); return; }
+      if(t==='HR'){ out+=para('',{bdr:'<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="999999"/></w:pBdr>'}); return; }
+      if(t==='PRE'){ n.textContent.split('\n').forEach(l=>out+=para(run(l,{}),{style:'Code'})); return; }
+      if(t==='BLOCKQUOTE'){ if(n.querySelector('p,div,h1,h2,h3,ul,ol')) out+=blocks(n,{...ctx,quote:1}); else out+=para(runs(n),{style:'Quote'}); return; }
+      if(/^(DIV|NAV|SECTION)$/.test(t)){ const cover=n.classList.contains('cover'); out+=blocks(n,{...ctx,align:cover?'center':ctx.align}); if(cover) out+='<w:p><w:r><w:br w:type="page"/></w:r></w:p>'; return; }
+      out+=para(runs(n),{style:ctx.quote?'Quote':undefined, align:ctx.align||alignOf(n)});
+    }); return out; }
+  const body=blocks(root);
+  const W='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  const doc=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W}><w:body>${body||'<w:p/>'}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  const font=S.font==='sans'?'Calibri':'Georgia';
+  const hs=(id,name,sz,lvl,extra='')=>`<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="${lvl===0?120:280}" w:after="100"/><w:outlineLvl w:val="${lvl}"/></w:pPr><w:rPr><w:b/>${extra}<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr></w:style>`;
+  const styles=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles ${W}><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:eastAsia="${font}" w:cs="Nirmala UI"/><w:sz w:val="23"/><w:szCs w:val="23"/><w:lang w:val="en-GB" w:bidi="bn-BD"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="140" w:line="300" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>
+<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>
+${hs('Heading1','heading 1',36,0)}${hs('Heading2','heading 2',30,1,'<w:color w:val="2E2E8A"/>')}${hs('Heading3','heading 3',26,2)}${hs('Heading4','heading 4',23,3,'<w:i/>')}
+<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:pBdr><w:left w:val="single" w:sz="12" w:space="8" w:color="5B5BF7"/></w:pBdr><w:ind w:left="567"/></w:pPr><w:rPr><w:i/><w:color w:val="555555"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Code"><w:name w:val="Code"/><w:basedOn w:val="Normal"/><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/><w:sz w:val="19"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="TableText"><w:name w:val="Table Text"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="40" w:after="40" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="21"/></w:rPr></w:style>
+</w:styles>`;
+  const lv=(k,ord)=>`<w:lvl w:ilvl="${k}"><w:start w:val="1"/><w:numFmt w:val="${ord?(k%3===1?'lowerLetter':k%3===2?'lowerRoman':'decimal'):'bullet'}"/><w:lvlText w:val="${ord?'%'+(k+1)+'.':['•','◦','▪'][k%3]}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${720*(k+1)}" w:hanging="360"/></w:pPr></w:lvl>`;
+  const numbering=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering ${W}>`+[0,1].map(a=>`<w:abstractNum w:abstractNumId="${a}"><w:multiLevelType w:val="hybridMultilevel"/>${Array.from({length:9},(_,k)=>lv(k,a===1)).join('')}</w:abstractNum>`).join('')+nums.map((a,i)=>`<w:num w:numId="${i+1}"><w:abstractNumId w:val="${a}"/>${a===1?'<w:lvlOverride w:ilvl="0"><w:startOverride w:val="1"/></w:lvlOverride>':''}</w:num>`).join('')+'</w:numbering>';
+  const docRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rIdN" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>${links.map(l=>`<Relationship Id="${l.id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${xe(l.href)}" TargetMode="External"/>`).join('')}</Relationships>`;
+  const now=new Date().toISOString().replace(/\.\d+Z$/,'Z');
+  const zip=new JSZip();
+  zip.file('[Content_Types].xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>`);
+  zip.file('_rels/.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>`);
+  zip.file('docProps/core.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xe($('#docTitle').value||'Document')}</dc:title><dc:creator>Inkwell</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`);
+  zip.file('word/document.xml',doc); zip.file('word/styles.xml',styles); zip.file('word/numbering.xml',numbering); zip.file('word/_rels/document.xml.rels',docRels);
+  return zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document', compression:'DEFLATE'});
+}
+async function importDocx(file){
+  const mammoth=await need('mammoth');
+  const r=await mammoth.convertToHtml({arrayBuffer:await file.arrayBuffer()},{styleMap:["p[style-name='Title'] => h1:fresh","p[style-name='Subtitle'] => h2:fresh","p[style-name='Quote'] => blockquote:fresh","p[style-name='Intense Quote'] => blockquote:fresh"]});
+  return {html:sanitizeHtml(r.value), images:(r.value.match(/<img/g)||[]).length};
+}
+
 /* ================= export / import ================= */
-function download(name, data, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([data],{type})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1500); }
+function download(name, data, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(data instanceof Blob?data:new Blob([data],{type})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1500); }
 const safeName=()=>($('#docTitle').value||'document').replace(/[\\/:*?"<>|]+/g,'').trim().slice(0,80)||'document';
 function exportHtmlDoc(forWord){
   const css=`body{font-family:Georgia,'Times New Roman',serif;font-size:12pt;line-height:1.55;max-width:760px;margin:40px auto;color:#111}h1{font-size:22pt}h2{font-size:16pt;margin-top:20pt}h3{font-size:13pt}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:5px 8px}th{background:#eee}blockquote{border-left:3px solid #999;margin-left:0;padding-left:12px;color:#444}.toc{background:#f4f4f4;padding:10px 16px}.cover{text-align:center;padding:60px 0;page-break-after:always}`;
@@ -1457,28 +1540,33 @@ function exportHtmlDoc(forWord){
 $('#btnExport').onclick=()=>{
   const m=modal(`<h3>Export & import</h3><p class="muted small" style="margin-top:0">Your documents are saved automatically in this browser on this device.</p>
   <div class="grid2">
-    <button class="btn" data-e="docx">📄 Word (.doc)</button><button class="btn" data-e="pdf">🖨 PDF (print)</button>
+    <button class="btn" data-e="docx">📄 Word (.docx)</button><button class="btn" data-e="pdf">🖨 PDF (print)</button>
     <button class="btn" data-e="md">⬇ Markdown (.md)</button><button class="btn" data-e="html">🌐 Web page (.html)</button>
     <button class="btn" data-e="txt">📃 Plain text (.txt)</button><button class="btn" data-e="copy">📋 Copy as Markdown</button>
-    <button class="btn" data-e="import">📂 Import .txt / .md / .html</button><button class="btn" data-e="backup">💾 Backup all documents</button>
+    <button class="btn" data-e="import">📂 Import Word / .txt / .md / .html</button><button class="btn" data-e="backup">💾 Backup all documents</button>
     <button class="btn" data-e="restore">♻️ Restore a backup</button>
   </div><div class="foot"><button class="btn" data-x>Close</button></div>`);
   $('[data-x]',m).onclick=()=>m.remove();
   m.addEventListener('click', e=>{ const b=e.target.closest('[data-e]'); if(!b) return; const k=b.dataset.e; persist();
-    if(k==='docx') download(safeName()+'.doc', '﻿'+exportHtmlDoc(true), 'application/msword');
+    if(k==='docx'){ toast('Building Word file…'); buildDocx().then(b=>download(safeName()+'.docx', b, b.type)).catch(er=>toast(er.message)); }
     if(k==='html') download(safeName()+'.html', exportHtmlDoc(false), 'text/html');
     if(k==='md') download(safeName()+'.md', htmlToMd(ed).trim(), 'text/markdown');
     if(k==='txt') download(safeName()+'.txt', ed.innerText, 'text/plain');
     if(k==='copy') copyText(htmlToMd(ed).trim());
     if(k==='pdf'){ m.remove(); setTimeout(()=>window.print(),100); return; }
-    if(k==='import'){ $('#fileIn').dataset.mode='import'; $('#fileIn').accept='.txt,.md,.markdown,.html,.htm'; $('#fileIn').click(); }
+    if(k==='import'){ $('#fileIn').dataset.mode='import'; $('#fileIn').accept='.docx,.txt,.md,.markdown,.html,.htm'; $('#fileIn').click(); }
     if(k==='backup') download('inkwell-backup.json', JSON.stringify({docs, settings:{...S, apiKey:''}},null,1), 'application/json');
     if(k==='restore'){ $('#fileIn').dataset.mode='restore'; $('#fileIn').accept='.json'; $('#fileIn').click(); }
     if(k!=='copy') m.remove();
   });
 };
 $('#fileIn').onchange=async e=>{
-  const f=e.target.files[0]; e.target.value=''; if(!f) return; const text=await f.text();
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  if(/\.docx$/i.test(f.name)){ if(e.target.dataset.mode==='restore') return toast('That is not an Inkwell backup file'); toast('Opening Word file…');
+    try{ const {html,images}=await importDocx(f); persist(); const d={id:uid(), title:f.name.replace(/\.[^.]+$/,''), html, mode:'write', updated:Date.now()}; docs.push(d); store.set('docs',docs); loadDoc(d.id); toast('Imported '+f.name+(images?' ('+images+' image'+(images>1?'s':'')+' skipped)':'')); }
+    catch(er){ toast('Could not open that Word file: '+er.message); } return; }
+  if(/\.doc$/i.test(f.name)) return toast('Old .doc files are not supported. Open it in Word or Google Docs and save it as .docx first.');
+  const text=await f.text();
   if(e.target.dataset.mode==='restore'){ try{ const j=JSON.parse(text); if(!Array.isArray(j.docs)) throw 0; const ids=new Set(docs.map(d=>d.id)); j.docs.forEach(d=>{ if(ids.has(d.id)) d.id=uid(); docs.push(d); }); store.set('docs',docs); renderDocList(); toast('Restored '+j.docs.length+' document(s)'); }catch(_){ toast('That is not an Inkwell backup file'); } return; }
   persist(); const html=/\.html?$/i.test(f.name)? sanitizeHtml((text.match(/<body[^>]*>([\s\S]*)<\/body>/i)||[0,text])[1]) : /\.(md|markdown)$/i.test(f.name)? mdToHtml(text) : text.split(/\n\s*\n/).map(p=>'<p>'+esc(p).replace(/\n/g,'<br>')+'</p>').join('');
   const d={id:uid(), title:f.name.replace(/\.[^.]+$/,''), html, mode:'write', updated:Date.now()}; docs.push(d); store.set('docs',docs); loadDoc(d.id); toast('Imported '+f.name);
