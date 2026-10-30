@@ -497,7 +497,7 @@ function promptBox(label, val=''){
 async function copyText(t){ try{ await navigator.clipboard.writeText(t); toast('Copied'); }catch(e){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy'); toast('Copied');}catch(_){toast('Copy failed');} ta.remove(); } }
 
 /* ================= settings ================= */
-const DEFAULTS = {apiKey:'', model:'gemini-2.5-flash', temperature:0.7, styleNotes:'', noEmDash:true, autoApply:true, speak:false,
+const DEFAULTS = {apiKey:'', provider:'auto', model:'gemini-2.5-flash', temperature:0.7, styleNotes:'', noEmDash:true, autoApply:true, speak:false,
   voiceLang:'en-US', dictEngine:'browser', cleanDictation:false, font:'serif', fontSize:18, theme:'light', goal:0, numbered:true,
   reportType:'general', customActions:[]};
 let S = Object.assign({}, DEFAULTS, store.get('settings', {}));
@@ -631,7 +631,10 @@ const cleanAI = t => String(t||'').replace(/^\s*```(?:markdown|md|text)?\s*\n([\
 
 /* ================= Gemini ================= */
 const API = 'https://generativelanguage.googleapis.com/v1beta';
-const modelId = () => String(S.model||'gemini-2.5-flash').replace(/^models\//,'').trim();
+const provider = () => S.provider==='gemini'||S.provider==='openrouter' ? S.provider : (/^sk-or-/.test(S.apiKey)?'openrouter':'gemini');
+const OR_API='https://openrouter.ai/api/v1';
+const modelId = () => { let m=String(S.model||'gemini-2.5-flash').replace(/^models\//,'').trim();
+  if(provider()==='openrouter'){ if(!m.includes('/')) m='google/'+m; } else m=m.replace(/^google\//,''); return m; };
 function styleRules(){
   let r='';
   if(S.noEmDash) r+='\n- Never use em dashes (—). Use commas, colons, full stops or brackets instead.';
@@ -639,10 +642,11 @@ function styleRules(){
   return r ? '\nStyle rules:'+r : '';
 }
 async function gemini({system, parts, history=[], json=false, temperature, onChunk, signal}){
-  if(!S.apiKey){ openSettings(); throw new Error('Add your Gemini API key in Settings first.'); }
+  if(!S.apiKey){ openSettings(); throw new Error('Add your API key (Gemini or OpenRouter) in Settings first.'); }
   const body={contents:[...history, {role:'user', parts}], generationConfig:{temperature: temperature ?? +S.temperature}};
   if(system) body.systemInstruction={parts:[{text:system}]};
   if(json) body.generationConfig.responseMimeType='application/json';
+  if(provider()==='openrouter') return openrouter({system, parts, history, json, temperature, onChunk, signal});
   const stream=!!onChunk;
   const url=`${API}/models/${encodeURIComponent(modelId())}:${stream?'streamGenerateContent?alt=sse':'generateContent'}`;
   let res;
@@ -662,6 +666,34 @@ async function gemini({system, parts, history=[], json=false, temperature, onChu
     let k; while((k=buf.indexOf('\n'))>=0){ const line=buf.slice(0,k).trim(); buf=buf.slice(k+1);
       if(line.startsWith('data:')){ const d=line.slice(5).trim(); if(!d) continue; let j; try{ j=JSON.parse(d);}catch(_){continue;} const t=pick(j); if(t){ full+=t; onChunk(full);} } } }
   if(!full) throw new Error('Gemini returned an empty answer. Try again.');
+  return full;
+}
+async function openrouter({system, parts, history=[], json=false, temperature, onChunk, signal}){
+  const conv=ps=>{ const out=ps.map(p=> p.inlineData ? {type:'input_audio', input_audio:{data:p.inlineData.data, format:(p.inlineData.mimeType.split('/')[1]||'wav').replace('mpeg','mp3').replace('x-wav','wav')}} : {type:'text', text:p.text||''});
+    return out.length===1&&out[0].type==='text' ? out[0].text : out; };
+  const messages=[]; if(system) messages.push({role:'system', content:system});
+  history.forEach(h=>messages.push({role:h.role==='model'?'assistant':'user', content:conv(h.parts)}));
+  messages.push({role:'user', content:conv(parts)});
+  const body={model:modelId(), messages, temperature: temperature ?? +S.temperature, stream:!!onChunk};
+  if(json) body.response_format={type:'json_object'};
+  let res;
+  try{ res=await fetch(OR_API+'/chat/completions',{method:'POST',signal,headers:{'Content-Type':'application/json','Authorization':'Bearer '+S.apiKey,'HTTP-Referer':location.origin.startsWith('http')?location.origin:'https://rimonis.github.io','X-Title':'Inkwell'},body:JSON.stringify(body)}); }
+  catch(e){ if(e.name==='AbortError') throw e; throw new Error('Could not reach OpenRouter. Check your internet connection.'); }
+  if(!res.ok){ let msg='HTTP '+res.status; try{ const j=await res.json(); msg=j.error?.message||msg; }catch(_){}
+    if(res.status===401) msg='OpenRouter rejected the API key: "'+msg+'" Fix: Settings, paste a fresh key from openrouter.ai/settings/keys.';
+    else if(res.status===402) msg='Your OpenRouter credits ran out ("'+msg+'"). Top up at openrouter.ai/settings/credits, or pick a free model (ends in :free).';
+    else if(res.status===404||/model/i.test(msg)&&res.status===400) msg='OpenRouter: "'+msg+'". Pick another model in Settings (tap "Load models").';
+    else if(res.status===429) msg='Rate limit reached on OpenRouter. Wait a minute or switch model.';
+    else msg='OpenRouter: '+msg;
+    throw new Error(msg); }
+  if(!onChunk){ const j=await res.json(); if(j.error) throw new Error('OpenRouter: '+(j.error.message||'error')); const t=j.choices?.[0]?.message?.content||''; if(!t) throw new Error('The AI returned an empty answer. Try again.'); return t; }
+  const reader=res.body.getReader(), dec=new TextDecoder(); let buf='', full='';
+  for(;;){ const {done,value}=await reader.read(); if(done) break; buf+=dec.decode(value,{stream:true});
+    let k; while((k=buf.indexOf('\n'))>=0){ const line=buf.slice(0,k).trim(); buf=buf.slice(k+1);
+      if(!line.startsWith('data:')) continue; const d=line.slice(5).trim(); if(!d||d==='[DONE]') continue; let j; try{ j=JSON.parse(d);}catch(_){continue;}
+      if(j.error) throw new Error('OpenRouter: '+(j.error.message||'error'));
+      const t=j.choices?.[0]?.delta?.content; if(t){ full+=t; onChunk(full);} } }
+  if(!full) throw new Error('The AI returned an empty answer. Try again.');
   return full;
 }
 function parseJSON(t){ t=String(t).trim().replace(/^```(?:json)?\s*/,'').replace(/```\s*$/,''); try{ return JSON.parse(t);}catch(e){ const m=t.match(/[\[{][\s\S]*[\]}]/); if(m) return JSON.parse(m[0]); throw new Error('Could not read the AI response. Try again.'); } }
@@ -1455,9 +1487,11 @@ $('#fileIn').onchange=async e=>{
 /* ================= settings modal ================= */
 function openSettings(){
   const m=modal(`<h3>Settings</h3>
-  <label class="f">Gemini API key</label>
+  <label class="f">API key (OpenRouter or Google Gemini)</label>
   <div class="row"><input type="password" id="sKey" class="grow" style="width:auto" placeholder="Paste your key (starts with AIza…)" value="${esc(S.apiKey)}"><button class="btn small" id="sShow">👁</button></div>
-  <p class="muted small" style="margin:4px 0 0">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. It is stored only in this browser.</p>
+  <p class="muted small" style="margin:4px 0 0">OpenRouter key (starts with sk-or-) from <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener">openrouter.ai/settings/keys</a>, or a Google key (starts with AIza) from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Stored only in this browser.</p>
+  <label class="f">Service</label>
+  <select id="sProv"><option value="auto">Auto (detect from the key)</option><option value="openrouter">OpenRouter</option><option value="gemini">Google Gemini direct</option></select>
   <label class="f">Model</label>
   <div class="row"><input type="text" id="sModel" class="grow" style="width:auto" value="${esc(modelId())}" list="modelList"><datalist id="modelList"></datalist><button class="btn small" id="sLoad">Load models</button><button class="btn small" id="sTest">Test</button></div>
   <p class="muted small" id="sTestOut" style="margin:4px 0 0">Flash models are fast and cheap; Pro models are smarter but slower.</p>
@@ -1472,26 +1506,31 @@ function openSettings(){
   <label class="f">Language you speak</label>
   <select id="sLang"><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="en-IN">English (India)</option><option value="bn-BD">বাংলা (Bangladesh)</option><option value="bn-IN">বাংলা (India)</option></select>
   <label class="f">Dictation engine</label>
-  <select id="sEng"><option value="browser">Live, free (browser speech recognition)${SR?'':' · not available in this browser'}</option><option value="gemini">Gemini (more accurate, mixed Bangla + English, uses API)</option></select>
+  <select id="sEng"><option value="browser">Live, free (browser speech recognition)${SR?'':' · not available in this browser'}</option><option value="gemini">AI (more accurate, mixed Bangla + English, uses your API)</option></select>
   <label class="switch"><input type="checkbox" id="sClean" ${S.cleanDictation?'checked':''}> Gemini dictation removes “um”, “uh” and false starts</label>
   <h4 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;color:var(--muted)">Editor</h4>
   <div class="grid2"><div><label class="f">Font</label><select id="sFont"><option value="serif">Serif (bookish)</option><option value="sans">Sans (clean)</option></select></div><div><label class="f">Text size</label><input type="number" id="sSize" min="13" max="28" value="${S.fontSize}"></div></div>
   <div class="foot"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok>Save</button></div>`);
-  $('#sLang',m).value=S.voiceLang; $('#sEng',m).value=S.dictEngine; $('#sFont',m).value=S.font;
+  $('#sLang',m).value=S.voiceLang; $('#sProv',m).value=S.provider||'auto'; $('#sEng',m).value=S.dictEngine; $('#sFont',m).value=S.font;
   $('#sShow',m).onclick=()=>{ const i=$('#sKey',m); i.type=i.type==='password'?'text':'password'; };
   $('#sTemp',m).oninput=e=>$('#sTv',m).textContent=e.target.value;
   $('#sLoad',m).onclick=async()=>{ const key=cleanKey($('#sKey',m).value); if(!key) return toast('Paste your key first'); $('#sTestOut',m).textContent='Loading…';
-    try{ const r=await fetch(API+'/models?pageSize=200',{headers:{'x-goog-api-key':key}}); const j=await r.json(); if(!r.ok) throw new Error(j.error?.message||r.status);
-      const ms=(j.models||[]).filter(x=>(x.supportedGenerationMethods||[]).includes('generateContent') && /gemini/i.test(x.name)).map(x=>x.name.replace('models/',''));
+    const prov=$('#sProv',m).value==='auto'?(/^sk-or-/.test(key)?'openrouter':'gemini'):$('#sProv',m).value;
+    try{ let ms;
+      if(prov==='openrouter'){ const r=await fetch(OR_API+'/models'); const j=await r.json(); if(!r.ok) throw new Error(j.error?.message||r.status);
+        const all=(j.data||[]).filter(x=>(x.architecture?.output_modalities||['text']).includes('text')).map(x=>x.id);
+        ms=[...all.filter(x=>/^google\/gemini/.test(x)), ...all.filter(x=>!/^google\/gemini/.test(x))]; }
+      else { const r=await fetch(API+'/models?pageSize=200',{headers:{'x-goog-api-key':key}}); const j=await r.json(); if(!r.ok) throw new Error(j.error?.message||r.status);
+      ms=(j.models||[]).filter(x=>(x.supportedGenerationMethods||[]).includes('generateContent') && /gemini/i.test(x.name)).map(x=>x.name.replace('models/','')); }
       $('#modelList',m).innerHTML=ms.map(x=>`<option value="${esc(x)}">`).join(''); $('#sTestOut',m).textContent=ms.length+' models found. Click the Model box to pick one: '+ms.filter(x=>!/tts|image|embedding|live|audio/i.test(x)).slice(0,8).join(', ');
     }catch(e){ $('#sTestOut',m).textContent='⚠️ '+e.message; } };
-  $('#sTest',m).onclick=async()=>{ const old={...S}; S.apiKey=cleanKey($('#sKey',m).value); S.model=$('#sModel',m).value.trim(); $('#sTestOut',m).textContent='Testing…'; if(!/^AIza[\w-]{35}$/.test(S.apiKey)) $('#sTestOut',m).textContent='Testing… (heads up: Gemini keys are usually 39 characters starting with AIza; this one is '+S.apiKey.length+' characters starting with '+S.apiKey.slice(0,4)+')';
+  $('#sTest',m).onclick=async()=>{ const old={...S}; S.apiKey=cleanKey($('#sKey',m).value); S.model=$('#sModel',m).value.trim(); S.provider=$('#sProv',m).value; $('#sTestOut',m).textContent='Testing…'; if(!/^AIza[\w-]{35}$/.test(S.apiKey) && !/^sk-or-/.test(S.apiKey)) $('#sTestOut',m).textContent='Testing… (heads up: keys usually start with sk-or- (OpenRouter) or AIza (Google); this one is '+S.apiKey.length+' characters starting with '+S.apiKey.slice(0,4)+')';
     try{ const t=await gemini({parts:[{text:'Reply with exactly: Connected ✓'}], temperature:0}); $('#sTestOut',m).textContent='✅ '+t.trim()+' ('+modelId()+')'; }catch(e){ $('#sTestOut',m).textContent='⚠️ '+e.message; }
-    S.apiKey=old.apiKey; S.model=old.model; };
+    S.apiKey=old.apiKey; S.model=old.model; S.provider=old.provider; };
   $('[data-x]',m).onclick=()=>m.remove();
   $('[data-ok]',m).onclick=()=>{
     Object.assign(S,{apiKey:cleanKey($('#sKey',m).value), model:$('#sModel',m).value.trim()||'gemini-2.5-flash', temperature:+$('#sTemp',m).value, styleNotes:$('#sStyle',m).value,
-      noEmDash:$('#sDash',m).checked, autoApply:$('#sAuto',m).checked, speak:$('#sSpeak',m).checked, voiceLang:$('#sLang',m).value, dictEngine:$('#sEng',m).value, cleanDictation:$('#sClean',m).checked,
+      noEmDash:$('#sDash',m).checked, autoApply:$('#sAuto',m).checked, speak:$('#sSpeak',m).checked, voiceLang:$('#sLang',m).value, provider:$('#sProv',m).value, dictEngine:$('#sEng',m).value, cleanDictation:$('#sClean',m).checked,
       font:$('#sFont',m).value, fontSize:Math.min(28,Math.max(13,+$('#sSize',m).value||18))});
     saveSettings(); applyLook(); m.remove(); toast('Settings saved');
   };
@@ -1500,7 +1539,7 @@ $('#btnSettings').onclick=openSettings;
 function applyLook(){
   document.documentElement.dataset.theme=S.theme; ed.classList.toggle('sans', S.font==='sans');
   document.documentElement.style.setProperty('--doc-size', S.fontSize+'px');
-  $('#modelTag').textContent=S.apiKey? '✨ '+modelId() : '⚠️ No API key, open ⚙︎ Settings';
+  $('#modelTag').textContent=S.apiKey? '✨ '+modelId()+(provider()==='openrouter'?' · OpenRouter':'') : '⚠️ No API key, open ⚙︎ Settings';
   $('#modelTag').style.cursor='pointer'; $('#modelTag').onclick=openSettings;
 }
 $('#tbTheme').onclick=()=>{ S.theme=S.theme==='dark'?'light':'dark'; saveSettings(); applyLook(); };
