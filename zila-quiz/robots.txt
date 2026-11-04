@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://rimonis.github.io/zila-quiz/sitemap.xml
