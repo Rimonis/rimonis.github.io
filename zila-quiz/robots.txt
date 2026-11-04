@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://rimonis.github.io/zila-quiz/sitemap.xml
+Sitemap: https://deshcheno.com/sitemap.xml
