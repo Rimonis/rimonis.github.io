@@ -89,6 +89,11 @@ main{flex:1;display:flex;min-height:0;position:relative}
 #editor td,#editor th{border:1px solid var(--line);padding:6px 9px;vertical-align:top}
 #editor th{background:var(--soft);text-align:left}
 #editor a{color:var(--accent)}
+#editor mark{background:#fff27a;color:inherit;border-radius:3px;padding:0 1px}
+[data-theme=dark] #editor mark{background:#6b5d00}
+.hl-item{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:6px}
+.hl-item .q{font-family:var(--font-doc);font-size:14px;line-height:1.55;margin:4px 0 6px}
+.hl-item.done{opacity:.45}
 #editor hr{border:none;border-top:1px solid var(--line);margin:1.5em 0}
 #editor .toc{background:var(--soft);border-radius:8px;padding:12px 18px;margin:0 0 1.2em;font-family:var(--font-ui);font-size:.85em}
 #editor .toc ol{margin:.3em 0;padding-left:1.4em}
@@ -160,8 +165,8 @@ body.focus #editorWrap{padding-top:60px}
 #bubble .custom input{padding:7px 10px}
 #bubble .res{margin-top:4px}
 #bubble .diff{font-family:var(--font-doc);font-size:15px;line-height:1.6;max-height:min(46vh,380px);overflow:auto;padding:8px 10px;background:var(--soft);border-radius:10px;white-space:pre-wrap;margin:6px 0 8px}
-#bubble .diff ins,.act ins,.issue ins{background:var(--ins);color:var(--ins-ink);text-decoration:none;border-radius:3px}
-#bubble .diff del,.act del,.issue del{background:var(--del);color:var(--del-ink);border-radius:3px}
+#bubble .diff ins,.act ins,.issue ins,.hl-item ins{background:var(--ins);color:var(--ins-ink);text-decoration:none;border-radius:3px}
+#bubble .diff del,.act del,.issue del,.hl-item del{background:var(--del);color:var(--del-ink);border-radius:3px}
 #bubble .lbl{font-size:12px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:6px}
 #bubble.sheet{left:0!important;right:0;bottom:0;top:auto!important;width:100%;border-radius:16px 16px 0 0;padding:10px 10px calc(10px + env(safe-area-inset-bottom))}
 .spin{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;display:inline-block}
@@ -266,6 +271,7 @@ footer{display:flex;gap:14px;align-items:center;padding:5px 12px;border-top:1px 
   <button class="tb" data-cmd="justifyCenter" title="Center">≣</button>
   <button class="tb" data-cmd="justifyFull" title="Justify">☰</button>
   <span class="sep"></span>
+  <button class="tb" id="tbHL" title="Highlight for AI (Ctrl+H)">🖍</button>
   <button class="tb" id="tbLink" title="Link">🔗</button>
   <button class="tb" id="tbTable" title="Insert table">▦</button>
   <button class="tb" data-cmd="insertHorizontalRule" title="Divider">―</button>
@@ -311,6 +317,26 @@ footer{display:flex;gap:14px;align-items:center;padding:5px 12px;border-top:1px 
 
     <!-- AI tools -->
     <div class="pane hidden" id="pane-ai">
+      <h4>Highlighted sentences</h4>
+      <div class="card">
+        <div class="title">🖍 Rewrite only what you highlighted</div>
+        <p class="muted small" style="margin:0 0 8px">Select text and tap 🖍 (toolbar or selection menu) to mark it. Highlights from Word or Google Docs count too. Then pick what to do and run it on all of them at once.</p>
+        <div class="row"><span class="tag" id="hlCount">0 highlighted</span><button class="btn small" id="hlPrev">↑</button><button class="btn small" id="hlNext">↓ Next</button><button class="btn small ghost" id="hlClear" style="margin-left:auto">Clear all</button></div>
+        <select id="hlAction" style="margin-top:8px">
+          <option value="Paraphrase it: say the same thing in fresh wording and a different sentence structure, keeping the meaning, facts and length.">🔁 Paraphrase</option>
+          <option value="Improve it: clearer, smoother and more engaging, same meaning.">✨ Improve</option>
+          <option value="Fix spelling, grammar and punctuation only. Change nothing else.">✅ Fix grammar</option>
+          <option value="Make it more concise without losing information.">✂️ Shorter</option>
+          <option value="Rewrite in a formal, professional register.">🎩 Formal</option>
+          <option value="Rewrite in plain, simple language.">🙂 Simpler</option>
+          <option value="Rewrite in the active voice.">💪 Active voice</option>
+          <option value="custom">✍️ My own instruction…</option>
+        </select>
+        <input type="text" id="hlCustom" class="hidden" style="margin-top:6px" placeholder="e.g. Make each one sound more confident">
+        <label class="switch small"><input type="checkbox" id="hlKeep"> Keep the highlight after replacing</label>
+        <button class="btn primary" id="hlRun" style="width:100%;justify-content:center">🖍 Rewrite highlighted</button>
+        <div id="hlOut"></div>
+      </div>
       <h4>Write</h4>
       <div class="card">
         <textarea id="genPrompt" placeholder="What should I write? e.g. a paragraph on why SMEs struggle with export finance"></textarea>
@@ -605,7 +631,7 @@ function htmlToMd(root){
   }
   return walk(root).replace(/\n{3,}/g,'\n\n');
 }
-const ALLOWED = new Set(['P','BR','B','STRONG','I','EM','U','S','STRIKE','DEL','SUP','SUB','H1','H2','H3','H4','H5','H6','UL','OL','LI','BLOCKQUOTE','A','TABLE','THEAD','TBODY','TR','TH','TD','CODE','PRE','HR','NAV','DIV']);
+const ALLOWED = new Set(['MARK','P','BR','B','STRONG','I','EM','U','S','STRIKE','DEL','SUP','SUB','H1','H2','H3','H4','H5','H6','UL','OL','LI','BLOCKQUOTE','A','TABLE','THEAD','TBODY','TR','TH','TD','CODE','PRE','HR','NAV','DIV']);
 function sanitizeHtml(html){
   const doc=new DOMParser().parseFromString('<body>'+html+'</body>','text/html');
   const clean=node=>{
@@ -619,6 +645,7 @@ function sanitizeHtml(html){
         let rep=document.createDocumentFragment(); while(c.firstChild) rep.appendChild(c.firstChild);
         if(/font-weight:\s*(bold|[6-9]00)/.test(st)){ const b=doc.createElement('b'); b.appendChild(rep); rep=b; }
         if(/font-style:\s*italic/.test(st)){ const i=doc.createElement('i'); i.appendChild(rep); rep=i; }
+        if(/background(-color)?:\s*(yellow|#ff0|#ffff00|rgb\(255,\s*255,\s*0\)|#fff2|#ffe|#fce|#ffd|#fef|#ff)/i.test(st) && !/background(-color)?:\s*(#fff(fff)?|white|transparent)\b/i.test(st)){ const mk=doc.createElement('mark'); mk.appendChild(rep); rep=mk; }
         c.replaceWith(rep); return;
       }
       [...c.attributes].forEach(a=>{ const ok=(c.tagName==='A'&&a.name==='href'&&/^(https?:|mailto:|#)/i.test(a.value)) || (a.name==='class'&&/^(toc|cover)$/.test(a.value)) || a.name==='colspan' || a.name==='rowspan'; if(!ok) c.removeAttribute(a.name); });
@@ -707,11 +734,11 @@ const cur = () => docs.find(d=>d.id===curId);
 const ed = $('#editor');
 let saveT=null;
 function persist(){ const d=cur(); d.html=ed.innerHTML; d.title=$('#docTitle').value||'Untitled'; d.updated=Date.now(); store.set('docs',docs); store.set('cur',curId); $('#saved').textContent='Saved'; }
-function dirty(){ $('#saved').textContent='Saving…'; clearTimeout(saveT); saveT=setTimeout(()=>{persist(); renderDocList();},700); updateCounts(); }
+function dirty(){ try{ updateHL(); }catch(_){} $('#saved').textContent='Saving…'; clearTimeout(saveT); saveT=setTimeout(()=>{persist(); renderDocList();},700); updateCounts(); }
 function loadDoc(id){
   if(cur()) persist();
   curId=id; const d=cur(); ed.innerHTML=d.html||''; $('#docTitle').value=d.title||'';
-  setMode(d.mode||'write', true); chatHistory=[]; renderChat(); renderDocList(); updateCounts(); hideBubble(true);
+  setMode(d.mode||'write', true); updateHL(); chatHistory=[]; renderChat(); renderDocList(); updateCounts(); hideBubble(true);
   store.set('cur',curId);
 }
 function renderDocList(){
@@ -823,6 +850,7 @@ const BASE_ACTIONS=[
   {k:'table', l:'▦ Table', p:'Organise this information into a Markdown table with sensible columns.'},
   {k:'translate', l:'🌐 Translate', p:null},
   {k:'explain', l:'💡 Explain', p:null},
+  {k:'hl', l:'🖍 Highlight', p:null},
 ];
 const REPORT_ACTIONS=[
   {k:'reportify', l:'📑 Report-ready', p:'Rewrite in a precise, objective report register: third person, no fluff, clear topic sentence, evidence-led.'},
@@ -877,6 +905,7 @@ document.addEventListener('mousedown', e=>{
 $('#bChips').addEventListener('click', e=>{
   const b=e.target.closest('.chip'); if(!b) return; const a=$('#bChips')._acts.find(x=>x.k===b.dataset.k);
   if(a.k==='translate'){ const t=selectionText(); const to=isBangla(t)?'English':'Bangla (Bengali, natural and standard, not overly formal)'; runSelection('Translate into '+to+'. Keep meaning, tone and formatting.', '🌐 Translate → '+(isBangla(t)?'English':'বাংলা')); return; }
+  if(a.k==='hl'){ const r=savedRange; hideBubble(true); toggleHighlight(r); return; }
   if(a.k==='explain'){ const t=selectionText(); hideBubble(); openSide('assistant'); sendChat('Explain this part of my document simply, and tell me if anything in it is unclear or weak:\n\n"'+t.slice(0,3000)+'"', {noEdit:true}); return; }
   runSelection(a.p, a.l);
 });
@@ -936,6 +965,7 @@ $('#bDiscard').onclick=()=>{ const r=bTarget; hideBubble(true); if(r) restoreRan
 document.addEventListener('keydown', e=>{
   if(e.key==='Escape'){ if(bubbleState!=='hidden'){ hideBubble(true); } $('#fabMenu').classList.add('hidden'); }
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='k'){ if(selectionText()){ e.preventDefault(); showBubble(); setTimeout(()=>$('#bInput').focus(),20);} }
+  if((e.ctrlKey||e.metaKey) && !e.shiftKey && e.key.toLowerCase()==='h' && inEditor(getSelection().anchorNode)){ e.preventDefault(); toggleHighlight(savedRange); }
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); persist(); toast('Saved on this device'); }
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='f'){ e.preventDefault(); openSide('writing'); const t=selectionText(); if(t) $('#findIn').value=t; $('#findIn').focus(); }
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='m'){ e.preventDefault(); startVoice(selectionText()?'selection':'agent'); }
@@ -973,6 +1003,75 @@ async function withLoading(container, title, fn){
   try{ const r=await fn(t=>{ $('.md',l).textContent=t; }); l.remove(); return r; }
   catch(e){ l.remove(); const er=document.createElement('div'); er.className='issue'; er.innerHTML='⚠️ '+esc(e.message); container.prepend(er); setTimeout(()=>er.remove(),9000); return null; }
 }
+
+
+/* ================= highlight & batch rewrite ================= */
+const markOf = n => { const el=n && (n.nodeType===1?n:n.parentNode); const m=el && el.closest && el.closest('mark'); return m && ed.contains(m) ? m : null; };
+function wrapMark(r){ restoreRange(r); exec('hiliteColor','#fff27a'); // turn the coloured spans into <mark>
+  $$('span[style*="background"]',ed).forEach(sp=>{ if(/255, 242, 122|fff27a/i.test(sp.style.backgroundColor)){ const m=document.createElement('mark'); while(sp.firstChild) m.appendChild(sp.firstChild); sp.replaceWith(m); } });
+  ed.normalize(); mergeMarks(); }
+function mergeMarks(){ $$('mark mark',ed).forEach(unwrap); $$('mark',ed).forEach(m=>{ let nx=m.nextSibling; while(nx && nx.nodeType===1 && nx.tagName==='MARK'){ while(nx.firstChild) m.appendChild(nx.firstChild); const d=nx; nx=nx.nextSibling; d.remove(); } if(!m.textContent.trim() && !m.querySelector('br')) m.replaceWith(...m.childNodes); }); }
+function unwrap(m){ m.replaceWith(...m.childNodes); }
+function toggleHighlight(r){
+  if(!r){ toast('Select some text first'); return; }
+  const m=markOf(r.startContainer)||markOf(r.endContainer);
+  if(m && (r.collapsed || m.contains(r.commonAncestorContainer))){ unwrap(m); ed.normalize(); dirty(); updateHL(); toast('Highlight removed'); return; }
+  if(r.collapsed){ toast('Select the text you want to highlight'); return; }
+  // remove marks fully inside the selection first, then wrap
+  wrapMark(r); getSelection().collapseToEnd(); dirty(); updateHL();
+}
+$('#toolbar').addEventListener('click', e=>{ if(e.target.closest('#tbHL')) toggleHighlight(savedRange); });
+function marks(){ return $$('mark',ed).filter(m=>m.textContent.trim()); }
+function updateHL(){ const n=marks().length; $('#hlCount').textContent=n+' highlighted'; $('#hlCount').className='tag'+(n?' warn':''); }
+let hlIdx=-1;
+function gotoMark(d){ const ms=marks(); if(!ms.length) return toast('Nothing highlighted yet'); hlIdx=(hlIdx+d+ms.length)%ms.length; const m=ms[hlIdx]; m.scrollIntoView({block:'center',behavior:'smooth'}); const r=document.createRange(); r.selectNodeContents(m); setHL('jump',r); setTimeout(()=>setHL('jump',null),1500); if(innerWidth<900) closeSide(); }
+$('#hlNext').onclick=()=>gotoMark(1); $('#hlPrev').onclick=()=>gotoMark(-1);
+$('#hlClear').onclick=async()=>{ const ms=marks(); if(!ms.length) return; if(!(await confirmBox(`Remove all ${ms.length} highlights? The text stays.`,'Remove'))) return; $$('mark',ed).forEach(unwrap); ed.normalize(); dirty(); updateHL(); };
+$('#hlAction').onchange=e=>$('#hlCustom').classList.toggle('hidden', e.target.value!=='custom');
+$('#hlKeep').checked=!!S.hlKeep; $('#hlKeep').onchange=e=>{ S.hlKeep=e.target.checked; saveSettings(); };
+$('#hlRun').onclick=async()=>{
+  const ms=marks(); if(!ms.length) return toast('Highlight some sentences first (select text, then 🖍)');
+  let instr=$('#hlAction').value; if(instr==='custom'){ instr=$('#hlCustom').value.trim(); if(!instr) return toast('Type your instruction first'); }
+  const items=ms.map((m,i)=>({id:i+1, el:m, text:m.innerText.replace(/\s+/g,' ').trim()}));
+  // document with numbered markers so the AI sees context
+  const tmp=document.createElement('div'); tmp.innerHTML=ed.innerHTML; $$('mark',tmp).filter(m=>m.textContent.trim()).forEach((m,i)=>{ m.replaceWith('⟦'+(i+1)+': '+m.textContent+' ⟧'); });
+  const ctx=htmlToMd(tmp).trim().slice(0,50000);
+  const report=document.body.classList.contains('report');
+  const out=$('#hlOut'); out.innerHTML=''; $('#hlRun').disabled=true;
+  const results={}; const BATCH=25;
+  try{
+    for(let b=0;b<items.length;b+=BATCH){
+      const chunk=items.slice(b,b+BATCH);
+      const l=loadingCard(out, `Rewriting ${Math.min(b+BATCH,items.length)} of ${items.length}…`);
+      try{
+        const raw=await gemini({json:true, temperature:0.7,
+          system:`You edit specific highlighted passages inside a document. Highlighted passages are marked in the document as ⟦number: text ⟧. For EACH passage listed, apply the instruction to that passage only. Each rewrite must still fit grammatically and logically into its exact spot in the document (same language, no new facts, no lost facts, keep any numbers and names). Do not merge or skip passages. Plain text only, no Markdown, no quotes around it.${report?' The document is a formal report; keep a professional register.':''}${styleRules()}
+Return JSON: {"items":[{"id":number,"text":"rewritten passage"}]}`,
+          parts:[{text:`INSTRUCTION: ${instr}\n\nDOCUMENT (for context):\n"""${ctx}"""\n\nPASSAGES TO REWRITE:\n${JSON.stringify(chunk.map(({id,text})=>({id,text})))}`}]});
+        (parseJSON(raw).items||[]).forEach(it=>{ if(it && it.id!=null && typeof it.text==='string') results[+it.id]=cleanAI(it.text); });
+      } finally { l.remove(); }
+    }
+  }catch(e){ const er=document.createElement('div'); er.className='issue'; er.textContent='⚠️ '+e.message; out.prepend(er); }
+  finally{ $('#hlRun').disabled=false; }
+  const got=items.filter(it=>results[it.id] && results[it.id]!==it.text);
+  if(!got.length){ if(!out.textContent.trim()) out.innerHTML='<div class="issue">No changes came back. Try again or pick another action.</div>'; return; }
+  const head=document.createElement('div'); head.className='row'; head.style.margin='10px 0 6px';
+  head.innerHTML=`<b>${got.length} rewrite${got.length>1?'s':''} ready</b><button class="btn small primary" data-all style="margin-left:auto">✓ Accept all</button><button class="btn small ghost" data-x>Discard</button>`;
+  out.appendChild(head);
+  const keep=()=>$('#hlKeep').checked;
+  const apply=(it,row)=>{ if(!it.el.isConnected){ toast('That passage was deleted'); return false; }
+    const node = keep() ? Object.assign(document.createElement('mark'),{textContent:results[it.id]}) : document.createTextNode(results[it.id]);
+    it.el.replaceWith(node); row.classList.add('done'); $$('button',row).forEach(b=>b.disabled=true); return true; };
+  const undoTo=snap=>()=>{ ed.innerHTML=snap; ed.normalize(); dirty(); out.innerHTML='<div class="issue">↶ Undone. Your highlights are back; run it again any time.</div>'; };
+  got.forEach(it=>{ const row=document.createElement('div'); row.className='hl-item';
+    row.innerHTML=`<span class="tag">#${it.id}</span><div class="q">${wordDiff(it.text, results[it.id])}</div><div class="row"><button class="btn small" data-go>Show</button><button class="btn small primary" data-ok>✓ Accept</button><button class="btn small" data-no>Skip</button></div>`;
+    $('[data-go]',row).onclick=()=>{ if(it.el.isConnected){ it.el.scrollIntoView({block:'center',behavior:'smooth'}); if(innerWidth<900) closeSide(); } };
+    $('[data-ok]',row).onclick=()=>{ const snap=ed.innerHTML; if(apply(it,row)){ ed.normalize(); dirty(); toast('Replaced', {label:'Undo', fn:undoTo(snap)}); } };
+    $('[data-no]',row).onclick=()=>{ row.classList.add('done'); $$('button',row).forEach(b=>b.disabled=true); };
+    row._it=it; out.appendChild(row); });
+  $('[data-all]',head).onclick=()=>{ const snap=ed.innerHTML; let n=0; [...out.querySelectorAll('.hl-item:not(.done)')].forEach(row=>{ if(apply(row._it,row)) n++; }); ed.normalize(); dirty(); toast(`Replaced ${n} passage${n===1?'':'s'}`, {label:'Undo', fn:undoTo(snap)}); };
+  $('[data-x]',head).onclick=()=>out.innerHTML='';
+};
 
 /* ================= AI tools (doc-wide) ================= */
 const insertBtns = (md) => [
@@ -1281,10 +1380,11 @@ $('#scanBtn').onclick=()=>{
   });
   const all=[...longs,...found]; const groups={}; all.forEach(i=>{ (groups[i.cat]=groups[i.cat]||[]).push(i); });
   if(!all.length){ out.innerHTML='<div class="issue">✨ Nothing flagged. Clean writing.</div>'; return; }
-  out.innerHTML=Object.entries(groups).map(([cat,items])=>`<details class="card" style="padding:8px 10px" ${items.length<6?'open':''}><summary style="cursor:pointer"><b>${esc(cat)}</b> <span class="tag ${items[0].cls}">${items.length}</span></summary><div style="margin-top:8px">${items.slice(0,60).map((it,k)=>`<div class="issue" data-g="${esc(cat)}" data-k="${k}"><div class="q">${it.hit?esc(it.text).replace(esc(it.hit),'<mark>'+esc(it.hit)+'</mark>'):esc(it.text.length>220?it.text.slice(0,220)+'…':it.text)}</div><div class="row">${it.hint?'<span class="muted small">'+esc(it.hint)+'</span>':''}<button class="btn small" data-go>Show</button><button class="btn small primary" data-fix>✨ Fix with AI</button></div></div>`).join('')}</div></details>`).join('');
+  out.innerHTML=Object.entries(groups).map(([cat,items])=>`<details class="card" style="padding:8px 10px" ${items.length<6?'open':''}><summary style="cursor:pointer"><b>${esc(cat)}</b> <span class="tag ${items[0].cls}">${items.length}</span></summary><div style="margin-top:8px"><button class="btn small" data-hlcat="${esc(cat)}" style="margin-bottom:6px">🖍 Highlight all ${items.length}</button>${items.slice(0,60).map((it,k)=>`<div class="issue" data-g="${esc(cat)}" data-k="${k}"><div class="q">${it.hit?esc(it.text).replace(esc(it.hit),'<mark>'+esc(it.hit)+'</mark>'):esc(it.text.length>220?it.text.slice(0,220)+'…':it.text)}</div><div class="row">${it.hint?'<span class="muted small">'+esc(it.hint)+'</span>':''}<button class="btn small" data-go>Show</button><button class="btn small primary" data-fix>✨ Fix with AI</button></div></div>`).join('')}</div></details>`).join('');
   out._groups=groups;
 };
 $('#scanOut').addEventListener('click', e=>{
+  const hc=e.target.closest('[data-hlcat]'); if(hc){ const its=$('#scanOut')._groups[hc.dataset.hlcat]; const seen=new Set(); let n=0; its.forEach(it=>{ if(seen.has(it.text)) return; seen.add(it.text); const r=findRange(it.text); if(r && !markOf(r.startContainer)){ wrapMark(r); n++; } }); dirty(); updateHL(); toast(`Highlighted ${n} sentence${n===1?'':'s'}. Rewrite them in ✨ AI tools.`, {label:'Open', fn:()=>openSide('ai')}); return; }
   const iss=e.target.closest('.issue[data-g]'); if(!iss) return; const it=$('#scanOut')._groups[iss.dataset.g][+iss.dataset.k];
   if(e.target.closest('[data-go]')) jumpTo(it.text);
   if(e.target.closest('[data-fix]')){ const r=jumpTo(it.text); if(r){ savedRange=r.cloneRange(); runSelection(it.fix, '✨ '+it.cat); } }
@@ -1457,7 +1557,7 @@ function numberedBodyHtml(){
 }
 async function buildDocx(){
   const JSZip=await need('JSZip'); const root=numberedBodyHtml(); const links=[], nums=[];
-  const run=(t,f)=>{ let pr=''; if(f.code) pr+='<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>'; if(f.b) pr+='<w:b/>'; if(f.i) pr+='<w:i/>'; if(f.s) pr+='<w:strike/>'; if(f.link) pr+='<w:color w:val="1155CC"/>'; if(f.u||f.link) pr+='<w:u w:val="single"/>'; if(f.sup) pr+='<w:vertAlign w:val="superscript"/>'; if(f.sub) pr+='<w:vertAlign w:val="subscript"/>';
+  const run=(t,f)=>{ let pr=''; if(f.code) pr+='<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>'; if(f.b) pr+='<w:b/>'; if(f.i) pr+='<w:i/>'; if(f.s) pr+='<w:strike/>'; if(f.link) pr+='<w:color w:val="1155CC"/>'; if(f.hl) pr+='<w:highlight w:val="yellow"/>'; if(f.u||f.link) pr+='<w:u w:val="single"/>'; if(f.sup) pr+='<w:vertAlign w:val="superscript"/>'; if(f.sub) pr+='<w:vertAlign w:val="subscript"/>';
     return `<w:r>${pr?'<w:rPr>'+pr+'</w:rPr>':''}<w:t xml:space="preserve">${xe(t)}</w:t></w:r>`; };
   function runs(node,fmt={}){ let out='';
     node.childNodes.forEach(c=>{
@@ -1465,7 +1565,7 @@ async function buildDocx(){
       if(c.nodeType!==1) return; const tag=c.tagName;
       if(tag==='BR'){ out+='<w:r><w:br/></w:r>'; return; }
       if(/^(UL|OL|TABLE)$/.test(tag)) return;
-      const f={...fmt}; if(/^(B|STRONG|TH)$/.test(tag)) f.b=1; if(/^(I|EM)$/.test(tag)) f.i=1; if(tag==='U') f.u=1; if(/^(S|STRIKE|DEL)$/.test(tag)) f.s=1; if(tag==='SUP') f.sup=1; if(tag==='SUB') f.sub=1; if(tag==='CODE') f.code=1;
+      const f={...fmt}; if(/^(B|STRONG|TH)$/.test(tag)) f.b=1; if(/^(I|EM)$/.test(tag)) f.i=1; if(tag==='U') f.u=1; if(/^(S|STRIKE|DEL)$/.test(tag)) f.s=1; if(tag==='SUP') f.sup=1; if(tag==='SUB') f.sub=1; if(tag==='CODE') f.code=1; if(tag==='MARK') f.hl=1;
       if(/^(P|DIV|H\d|BLOCKQUOTE|PRE)$/.test(tag) && out) out+='<w:r><w:br/></w:r>';
       const href=tag==='A'&&c.getAttribute('href');
       if(href && /^(https?:|mailto:)/i.test(href)){ const id='rIdL'+(links.length+1); links.push({id,href}); out+=`<w:hyperlink r:id="${id}">`+runs(c,{...f,link:1})+'</w:hyperlink>'; return; }
@@ -1524,7 +1624,7 @@ ${hs('Heading1','heading 1',36,0)}${hs('Heading2','heading 2',30,1,'<w:color w:v
 }
 async function importDocx(file){
   const mammoth=await need('mammoth');
-  const r=await mammoth.convertToHtml({arrayBuffer:await file.arrayBuffer()},{styleMap:["p[style-name='Title'] => h1:fresh","p[style-name='Subtitle'] => h2:fresh","p[style-name='Quote'] => blockquote:fresh","p[style-name='Intense Quote'] => blockquote:fresh"]});
+  const r=await mammoth.convertToHtml({arrayBuffer:await file.arrayBuffer()},{styleMap:["p[style-name='Title'] => h1:fresh","p[style-name='Subtitle'] => h2:fresh","p[style-name='Quote'] => blockquote:fresh","p[style-name='Intense Quote'] => blockquote:fresh","highlight => mark"]});
   return {html:sanitizeHtml(r.value), images:(r.value.match(/<img/g)||[]).length};
 }
 
@@ -1639,7 +1739,7 @@ $('#tbFind').onclick=()=>{ openSide('writing'); const t=selectionText(); if(t) $
 applyLook();
 ed.innerHTML=cur().html||''; $('#docTitle').value=cur().title||'';
 setMode(cur().mode||'write', true);
-renderDocList(); renderChat(); updateCounts();
+renderDocList(); renderChat(); updateCounts(); updateHL();
 if(innerWidth>=1100) $('#drawer').classList.add('hidden');
 const lastTab=store.get('tab',null); if(lastTab && innerWidth>=900) openSide(lastTab);
 if(!S.apiKey) setTimeout(()=>toast('Welcome! Open ⚙︎ Settings and paste your Gemini API key to switch on the AI.'),600);
