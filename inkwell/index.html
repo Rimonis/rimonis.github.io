@@ -320,8 +320,9 @@ footer{display:flex;gap:14px;align-items:center;padding:5px 12px;border-top:1px 
       <h4>Highlighted sentences</h4>
       <div class="card">
         <div class="title">🖍 Rewrite only what you highlighted</div>
-        <p class="muted small" style="margin:0 0 8px">Select text and tap 🖍 (toolbar or selection menu) to mark it. Highlights from Word or Google Docs count too. Then pick what to do and run it on all of them at once.</p>
+        <p class="muted small" style="margin:0 0 8px">Select text and tap 🖍 (toolbar or selection menu) to mark it. Highlights from Word or Google Docs count too, and so does text wrapped in [[ ]], {{ }} or (( )). Then pick what to do and run it on all of them at once.</p>
         <div class="row"><span class="tag" id="hlCount">0 highlighted</span><button class="btn small" id="hlPrev">↑</button><button class="btn small" id="hlNext">↓ Next</button><button class="btn small ghost" id="hlClear" style="margin-left:auto">Clear all</button></div>
+        <button class="btn small" id="hlBrackets" style="margin-top:6px" title="Turns [[text]], {{text}} and ((text)) already in this document into highlights">[[ ]] {{ }} → 🖍 Convert brackets in this document</button>
         <select id="hlAction" style="margin-top:8px">
           <option value="Paraphrase it: say the same thing in fresh wording and a different sentence structure, keeping the meaning, facts and length.">🔁 Paraphrase</option>
           <option value="Improve it: clearer, smoother and more engaging, same meaning.">✨ Improve</option>
@@ -653,6 +654,15 @@ function sanitizeHtml(html){
   };
   clean(doc.body); return doc.body.innerHTML;
 }
+
+/* [[double brackets]], {{double curly}} or ((double round)) become highlights; stays inside one paragraph */
+function bracketsToMarks(html){
+  let n=0; const BLOCK=/<\/?(p|div|h[1-6]|li|ul|ol|table|tr|td|th|blockquote|pre|nav|section|br)\b/i;
+  const conv=(m,inner)=>{ if(BLOCK.test(inner) || !inner.replace(/<[^>]+>/g,'').trim()) return m; n++; return '<mark>'+inner+'</mark>'; };
+  html=html.replace(/\[\[([\s\S]*?)\]\]/g, conv).replace(/\{\{([\s\S]*?)\}\}/g, conv).replace(/\(\(([\s\S]*?)\)\)/g, conv);
+  if(n){ const d=document.createElement('div'); d.innerHTML=html; d.querySelectorAll('mark mark').forEach(x=>x.replaceWith(...x.childNodes)); html=d.innerHTML; }
+  return {html, n};
+}
 const cleanKey = k => String(k||'').replace(/[\s"'`\u200B-\u200D\u2060\uFEFF]/g,'');
 const cleanAI = t => String(t||'').replace(/^\s*```(?:markdown|md|text)?\s*\n([\s\S]*?)\n```\s*$/,'$1').replace(/^\s*["“](.*)["”]\s*$/s,'$1').trim();
 
@@ -791,9 +801,12 @@ $('#tbTable').onclick=async()=>{ const r=caretRange(); const v=await promptBox('
 ed.addEventListener('paste', e=>{
   const html=e.clipboardData.getData('text/html'), text=e.clipboardData.getData('text/plain');
   e.preventDefault();
-  if(html) exec('insertHTML', sanitizeHtml(html));
-  else if(/^(#{1,6}\s|\s*[-*]\s|\s*\d+\.\s)|\*\*|\n\|/m.test(text) && text.length>20) exec('insertHTML', mdToHtml(text));
-  else exec('insertText', text);
+  let out=null;
+  if(html) out=sanitizeHtml(html);
+  else if(/^(#{1,6}\s|\s*[-*]\s|\s*\d+\.\s)|\*\*|\n\|/m.test(text) && text.length>20) out=mdToHtml(text);
+  const bm=bracketsToMarks(out ?? esc(text).replace(/\n/g,'<br>'));
+  if(bm.n) { exec('insertHTML', bm.html); toast(bm.n+' bracketed passage'+(bm.n>1?'s':'')+' highlighted'); }
+  else if(out!=null) exec('insertHTML', out); else exec('insertText', text);
   dirty();
 });
 document.addEventListener('keyup', ()=>{ const sel=getSelection(); if(sel.rangeCount && inEditor(sel.anchorNode)){ const b=sel.anchorNode.nodeType===1?sel.anchorNode:sel.anchorNode.parentNode; const blk=b.closest&&b.closest('h1,h2,h3,blockquote,pre,p'); $('#blockSel').value=blk&&ed.contains(blk)?blk.tagName.toLowerCase():'p'; } });
@@ -1027,6 +1040,7 @@ let hlIdx=-1;
 function gotoMark(d){ const ms=marks(); if(!ms.length) return toast('Nothing highlighted yet'); hlIdx=(hlIdx+d+ms.length)%ms.length; const m=ms[hlIdx]; m.scrollIntoView({block:'center',behavior:'smooth'}); const r=document.createRange(); r.selectNodeContents(m); setHL('jump',r); setTimeout(()=>setHL('jump',null),1500); if(innerWidth<900) closeSide(); }
 $('#hlNext').onclick=()=>gotoMark(1); $('#hlPrev').onclick=()=>gotoMark(-1);
 $('#hlClear').onclick=async()=>{ const ms=marks(); if(!ms.length) return; if(!(await confirmBox(`Remove all ${ms.length} highlights? The text stays.`,'Remove'))) return; $$('mark',ed).forEach(unwrap); ed.normalize(); dirty(); updateHL(); };
+$('#hlBrackets').onclick=()=>{ const bm=bracketsToMarks(ed.innerHTML); if(!bm.n) return toast('No [[ ]], {{ }} or (( )) text found'); const snap=ed.innerHTML; ed.innerHTML=bm.html; dirty(); toast(bm.n+' passage'+(bm.n>1?'s':'')+' highlighted', {label:'Undo', fn:()=>{ ed.innerHTML=snap; dirty(); }}); };
 $('#hlAction').onchange=e=>$('#hlCustom').classList.toggle('hidden', e.target.value!=='custom');
 $('#hlKeep').checked=!!S.hlKeep; $('#hlKeep').onchange=e=>{ S.hlKeep=e.target.checked; saveSettings(); };
 $('#hlRun').onclick=async()=>{
@@ -1663,13 +1677,13 @@ $('#btnExport').onclick=()=>{
 $('#fileIn').onchange=async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f) return;
   if(/\.docx$/i.test(f.name)){ if(e.target.dataset.mode==='restore') return toast('That is not an Inkwell backup file'); toast('Opening Word file…');
-    try{ const {html,images}=await importDocx(f); persist(); const d={id:uid(), title:f.name.replace(/\.[^.]+$/,''), html, mode:'write', updated:Date.now()}; docs.push(d); store.set('docs',docs); loadDoc(d.id); toast('Imported '+f.name+(images?' ('+images+' image'+(images>1?'s':'')+' skipped)':'')); }
+    try{ const imp=await importDocx(f); const bm=bracketsToMarks(imp.html); persist(); const d={id:uid(), title:f.name.replace(/\.[^.]+$/,''), html:bm.html, mode:'write', updated:Date.now()}; docs.push(d); store.set('docs',docs); loadDoc(d.id); toast('Imported '+f.name+(bm.n?' · '+bm.n+' bracketed passage'+(bm.n>1?'s':'')+' highlighted':'')+(imp.images?' ('+imp.images+' image'+(imp.images>1?'s':'')+' skipped)':''), bm.n?{label:'Rewrite them', fn:()=>openSide('ai')}:null); }
     catch(er){ toast('Could not open that Word file: '+er.message); } return; }
   if(/\.doc$/i.test(f.name)) return toast('Old .doc files are not supported. Open it in Word or Google Docs and save it as .docx first.');
   const text=await f.text();
   if(e.target.dataset.mode==='restore'){ try{ const j=JSON.parse(text); if(!Array.isArray(j.docs)) throw 0; const ids=new Set(docs.map(d=>d.id)); j.docs.forEach(d=>{ if(ids.has(d.id)) d.id=uid(); docs.push(d); }); store.set('docs',docs); renderDocList(); toast('Restored '+j.docs.length+' document(s)'); }catch(_){ toast('That is not an Inkwell backup file'); } return; }
   persist(); const html=/\.html?$/i.test(f.name)? sanitizeHtml((text.match(/<body[^>]*>([\s\S]*)<\/body>/i)||[0,text])[1]) : /\.(md|markdown)$/i.test(f.name)? mdToHtml(text) : text.split(/\n\s*\n/).map(p=>'<p>'+esc(p).replace(/\n/g,'<br>')+'</p>').join('');
-  const d={id:uid(), title:f.name.replace(/\.[^.]+$/,''), html, mode:'write', updated:Date.now()}; docs.push(d); store.set('docs',docs); loadDoc(d.id); toast('Imported '+f.name);
+  const bm=bracketsToMarks(html); const d={id:uid(), title:f.name.replace(/\.[^.]+$/,''), html:bm.html, mode:'write', updated:Date.now()}; docs.push(d); store.set('docs',docs); loadDoc(d.id); toast('Imported '+f.name+(bm.n?' · '+bm.n+' bracketed passage'+(bm.n>1?'s':'')+' highlighted':''), bm.n?{label:'Rewrite them', fn:()=>openSide('ai')}:null);
 };
 
 /* ================= settings modal ================= */
@@ -1742,7 +1756,7 @@ setMode(cur().mode||'write', true);
 renderDocList(); renderChat(); updateCounts(); updateHL();
 if(innerWidth>=1100) $('#drawer').classList.add('hidden');
 const lastTab=store.get('tab',null); if(lastTab && innerWidth>=900) openSide(lastTab);
-if(!S.apiKey) setTimeout(()=>toast('Welcome! Open ⚙︎ Settings and paste your Gemini API key to switch on the AI.'),600);
+if(!S.apiKey) setTimeout(()=>toast('Welcome! Open ⚙︎ Settings and paste your OpenRouter or Gemini API key to switch on the AI.'),600);
 addEventListener('beforeunload', persist);
 document.addEventListener('visibilitychange', ()=>{ if(document.hidden) persist(); });
 </script>
